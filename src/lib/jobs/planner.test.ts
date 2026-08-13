@@ -10,23 +10,33 @@ test("appends recovered-footage suffix once", () => {
   assert.equal(twice.split(I2V_SUFFIX).length, 2);
 });
 
-test("clip-only Seedance body omits end frame when none is given", () => {
+test("clip-only Seedance body uses Mini at 480p and omits end frame when none is given", () => {
+  const startFrame = {
+    type: "inline_base64" as const,
+    content_base64: "AAAA",
+    mime_type: "image/png" as const,
+  };
   const startOnly = seedanceRequestBody({
     prompt: "Slow pan across the still.",
-    startImageUrl: "https://example.com/start.png",
+    startFrame,
   });
-  assert.equal(startOnly.image_url, "https://example.com/start.png");
-  assert.equal("end_image_url" in startOnly, false);
-  assert.equal(startOnly.duration, "6");
+  assert.equal(startOnly.model_id, "bytedance-seedance-v2-mini");
+  assert.equal(startOnly.start_frame.content_base64, "AAAA");
+  assert.equal("end_frame" in startOnly, false);
+  assert.equal(startOnly.duration_secs, 6);
   assert.equal(startOnly.resolution, "480p");
   assert.equal(startOnly.generate_audio, false);
   assert.equal(startOnly.aspect_ratio, "16:9");
-  assert.equal(startOnly.camera_fixed, false);
 
   const both = seedanceRequestBody({
     prompt: "Cut on action.",
-    startImageUrl: "https://example.com/start.png",
-    endImageUrl: "https://example.com/end.png",
+    startFrame,
+    endFrame: {
+      type: "inline_base64",
+      content_base64: "BBBB",
+      mime_type: "image/jpeg",
+    },
   });
-  assert.equal(both.end_image_url, "https://example.com/end.png");
+  assert.equal(both.end_frame?.content_base64, "BBBB");
+  assert.equal(both.end_frame?.mime_type, "image/jpeg");
 });
