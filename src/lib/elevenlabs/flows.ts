@@ -1,4 +1,4 @@
-const BASE = "https://api.elevenlabs.io";
+const BASE = (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").replace(/\/$/, "");
 
 function elevenKey(): string {
   const key = process.env.ELEVENLABS_API_KEY || "";
