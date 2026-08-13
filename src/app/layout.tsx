@@ -17,7 +17,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Hook clip factory",
-  description: "Stills in, Seedance 6s clips out. Separate from the AI scenes image maker.",
+  description: "Always 18 seconds: 3 scenes, 2 GPT Image 2 frames each, Seedance 2.5 clips, silent assemble.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

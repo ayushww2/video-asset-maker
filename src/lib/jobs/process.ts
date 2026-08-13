@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { combineHookClips } from "@/lib/ffmpeg";
 import { generateGptImage } from "@/lib/images/gptImage";
-import { analyzeAssembly, analyzeStartEndFrames } from "@/lib/jobs/analyzeFrames";
+import { analyzeStartEndFrames } from "@/lib/jobs/analyzeFrames";
+import { CLIP_SECONDS, SCENE_COUNT, hookProgressTotal, sceneOrder } from "@/lib/jobs/pipeline";
 import { planHook, type HookPlan } from "@/lib/jobs/planner";
 import { maxHooksPerDay } from "@/lib/env";
 import { uploadToR2 } from "@/lib/r2";
@@ -44,13 +45,12 @@ async function processJob(jobId: string) {
     if (!plan?.scenes?.length) {
       await prisma.hookJob.update({ where: { id: jobId }, data: { status: "planning" } });
       plan = await planHook({ title: job.title, script: job.script });
-      const total = 1 + plan.sceneCount * 4 + 1;
       await prisma.hookJob.update({
         where: { id: jobId },
         data: {
           plan: plan as object,
-          sceneCount: plan.sceneCount,
-          progressTotal: total,
+          sceneCount: SCENE_COUNT,
+          progressTotal: hookProgressTotal(),
           progressDone: 1,
           status: "imaging",
         },
@@ -60,7 +60,7 @@ async function processJob(jobId: string) {
           where: { jobId_sceneNumber: { jobId, sceneNumber: scene.sceneNumber } },
           update: {
             purpose: scene.purpose,
-            durationSec: 6,
+            durationSec: CLIP_SECONDS,
             whatViewerSees: scene.whatViewerSees,
             curiosity: scene.curiosity,
             startPrompt: scene.startPrompt,
@@ -72,7 +72,7 @@ async function processJob(jobId: string) {
             jobId,
             sceneNumber: scene.sceneNumber,
             purpose: scene.purpose,
-            durationSec: 6,
+            durationSec: CLIP_SECONDS,
             whatViewerSees: scene.whatViewerSees,
             curiosity: scene.curiosity,
             startPrompt: scene.startPrompt,
@@ -154,8 +154,8 @@ async function processJob(jobId: string) {
         await setProgress(jobId, done);
         continue;
       }
-      if (!scene.startImageUrl) {
-        throw new Error(`Scene ${scene.sceneNumber} missing start frame`);
+      if (!scene.startImageUrl || !scene.endImageUrl) {
+        throw new Error(`Scene ${scene.sceneNumber} needs start and end frames`);
       }
       await prisma.hookScene.update({ where: { id: scene.id }, data: { status: "animating" } });
       const clip = await generateSeedanceClip({
@@ -178,16 +178,13 @@ async function processJob(jobId: string) {
       where: { jobId },
       orderBy: { sceneNumber: "asc" },
     });
-    const assembly = await analyzeAssembly({
-      title: job.title,
-      sceneSummaries: finalScenes.map(
-        (s) => `${s.purpose || "scene"} — ${s.whatViewerSees || ""}`,
-      ),
-    });
-    const order = assembly.clipOrder.length ? assembly.clipOrder : finalScenes.map((s) => s.sceneNumber);
-    const ordered = order
+    if (finalScenes.length !== SCENE_COUNT) {
+      throw new Error(`Need ${SCENE_COUNT} scenes for an 18s assemble, got ${finalScenes.length}`);
+    }
+    const ordered = sceneOrder()
       .map((n) => finalScenes.find((s) => s.sceneNumber === n))
       .filter((s): s is (typeof finalScenes)[number] => Boolean(s && s.clipUrl));
+    if (ordered.length !== SCENE_COUNT) throw new Error("Each of the 3 scenes must have a Seedance clip");
 
     const clipBuffers: Buffer[] = [];
     for (const scene of ordered) {
@@ -195,11 +192,7 @@ async function processJob(jobId: string) {
       if (!res.ok) throw new Error(`Failed to fetch scene ${scene.sceneNumber} clip`);
       clipBuffers.push(Buffer.from(await res.arrayBuffer()));
     }
-    if (!clipBuffers.length) throw new Error("No Seedance clips to assemble");
-    const combined =
-      clipBuffers.length === 1
-        ? clipBuffers[0]
-        : await combineHookClips({ clipBuffers, voiceover: null });
+    const combined = await combineHookClips({ clipBuffers });
     const finalUpload = await uploadToR2({
       key: `hooks/${jobId}/final.mp4`,
       body: combined,
@@ -210,7 +203,10 @@ async function processJob(jobId: string) {
       where: { id: jobId },
       data: {
         status: "completed",
-        assembleNotes: assembly as object,
+        assembleNotes: {
+          clipOrder: sceneOrder(),
+          reason: "Fixed 18s assemble: scene 1 → 2 → 3, 6s each, silent.",
+        },
         finalVideoUrl: finalUpload.url,
         finalVideoKey: finalUpload.key,
         progressDone: job.progressTotal || done + 1,
@@ -240,7 +236,9 @@ async function processClipJob(jobId: string) {
       where: { jobId },
       orderBy: { sceneNumber: "asc" },
     });
-    if (!scenes.length) throw new Error("Clip job has no stills");
+    if (scenes.length !== SCENE_COUNT) {
+      throw new Error(`Clip jobs need ${SCENE_COUNT} scenes (start+end each) for an 18s assemble`);
+    }
 
     let done = 0;
     for (const scene of scenes) {
@@ -249,7 +247,9 @@ async function processClipJob(jobId: string) {
         await setProgress(jobId, done);
         continue;
       }
-      if (!scene.startImageUrl) throw new Error(`Clip ${scene.sceneNumber} needs a start still`);
+      if (!scene.startImageUrl || !scene.endImageUrl) {
+        throw new Error(`Scene ${scene.sceneNumber} needs start and end stills`);
+      }
       await prisma.hookScene.update({ where: { id: scene.id }, data: { status: "animating" } });
       const clip = await generateSeedanceClip({
         prompt: scene.i2vPrompt || "",
@@ -271,34 +271,28 @@ async function processClipJob(jobId: string) {
       orderBy: { sceneNumber: "asc" },
     });
     const withClips = finished.filter((s) => s.clipUrl);
-    if (!withClips.length) throw new Error("Seedance returned no clips");
+    if (withClips.length !== SCENE_COUNT) throw new Error("Need 3 Seedance clips to assemble 18s");
 
-    let finalUrl = withClips[0].clipUrl!;
-    let finalKey = withClips[0].clipKey;
-    if (withClips.length > 1) {
-      await prisma.hookJob.update({ where: { id: jobId }, data: { status: "combining" } });
-      const clipBuffers: Buffer[] = [];
-      for (const scene of withClips) {
-        const res = await fetch(scene.clipUrl!, { signal: AbortSignal.timeout(120_000) });
-        if (!res.ok) throw new Error(`Failed to fetch clip ${scene.sceneNumber}`);
-        clipBuffers.push(Buffer.from(await res.arrayBuffer()));
-      }
-      const combined = await combineHookClips({ clipBuffers, voiceover: null });
-      const uploaded = await uploadToR2({
-        key: `clips/${jobId}/final.mp4`,
-        body: combined,
-        contentType: "video/mp4",
-      });
-      finalUrl = uploaded.url;
-      finalKey = uploaded.key;
+    await prisma.hookJob.update({ where: { id: jobId }, data: { status: "combining" } });
+    const clipBuffers: Buffer[] = [];
+    for (const scene of withClips) {
+      const res = await fetch(scene.clipUrl!, { signal: AbortSignal.timeout(120_000) });
+      if (!res.ok) throw new Error(`Failed to fetch clip ${scene.sceneNumber}`);
+      clipBuffers.push(Buffer.from(await res.arrayBuffer()));
     }
+    const combined = await combineHookClips({ clipBuffers });
+    const uploaded = await uploadToR2({
+      key: `clips/${jobId}/final.mp4`,
+      body: combined,
+      contentType: "video/mp4",
+    });
 
     await prisma.hookJob.update({
       where: { id: jobId },
       data: {
         status: "completed",
-        finalVideoUrl: finalUrl,
-        finalVideoKey: finalKey,
+        finalVideoUrl: uploaded.url,
+        finalVideoKey: uploaded.key,
         progressDone: job.progressTotal || done,
         completedAt: new Date(),
         error: null,

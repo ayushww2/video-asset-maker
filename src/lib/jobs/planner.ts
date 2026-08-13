@@ -1,5 +1,6 @@
 import { createContactBoxClient, plannerModel } from "@/lib/contactbox";
 import { I2V_SUFFIX } from "@/lib/seedance";
+import { CLIP_SECONDS, FINAL_SECONDS, SCENE_COUNT, sceneOrder } from "@/lib/jobs/pipeline";
 
 export type PlannedScene = {
   sceneNumber: number;
@@ -14,7 +15,7 @@ export type PlannedScene = {
 };
 
 export type HookPlan = {
-  sceneCount: 2 | 3;
+  sceneCount: 3;
   whyThisStructure: string;
   evidenceStyle: string;
   scenes: PlannedScene[];
@@ -32,15 +33,12 @@ export type HookPlan = {
 };
 
 const SYSTEM = `You are a senior YouTube mystery-documentary hook designer.
-Create a realistic 2-scene or 3-scene hook footage plan for the first 8–15 seconds.
-Images will be converted to video clips. The hook must feel like recovered real-life footage or old evidence footage.
+Create a realistic 3-scene hook footage plan. The backend ALWAYS makes exactly 3 scenes, 2 frames each, then 3 silent 6-second clips, then one 18-second assemble. Never plan 2 scenes. Never plan voiceover.
 
-Feel: real, low-quality, believable, old POV / camcorder / bodycam / CCTV / expedition footage, early 2000s or rough field-recording when appropriate, suitable for narration.
+Feel: real, low-quality, believable, old POV / camcorder / bodycam / CCTV / expedition footage, early 2000s or rough field-recording when appropriate.
 Must NOT look like polished AI art, fantasy, or cinematic trailer shots.
 
 Choose footage type that fits: deployment, monitor/telemetry, POV search, partial reveal, lab/archive, aftermath / cut recording.
-Choose 2 scenes if the title is simple and stronger with speed.
-Choose 3 scenes if the title benefits from escalation and mystery buildup.
 
 Rules:
 - Alleged recovered evidence, not polished movie footage.
@@ -49,7 +47,7 @@ Rules:
 - Practical and recordable in real life.
 - Create a question in the viewer's mind.
 - Do not force text overlays inside image prompts. Suggest overlays only in edit notes.
-- If another language/accent is more authentic, use it in voiceover and explain why. Otherwise English.
+- No voiceover. Silent clips only.
 
 Global style for ALL image prompts:
 low-resolution recovered footage, old camera look, soft focus, practical framing, imperfect composition, mild motion blur, mild sensor noise, compression artifacts, slightly dirty lens, muted colors, weak practical light, documentary realism, no readable text, no logos, no fake futuristic UI.
@@ -67,7 +65,7 @@ Each scene needs TWO image prompts: start frame and end frame. They must be the 
 
 Return ONLY JSON with this shape:
 {
-  "sceneCount": 2 or 3,
+  "sceneCount": 3,
   "whyThisStructure": string,
   "evidenceStyle": string,
   "scenes": [{
@@ -81,31 +79,20 @@ Return ONLY JSON with this shape:
     "endPrompt": string,
     "i2vPrompt": string
   }],
-  "voiceover": {
-    "language": string,
-    "languageWhy": string,
-    "lines": string[]
-  },
   "editNotes": {
-    "clipOrder": number[],
+    "clipOrder": [1, 2, 3],
     "soundDesign": string,
     "overlayText": string[],
-    "finalTiming": string
+    "finalTiming": "18 seconds (3 × 6s silent Seedance clips)"
   }
 }
 
 Image prompts must be detailed, 16:9, photoreal recovered footage.
-i2vPrompt must tell the model to preserve the exact image and only animate subtle believable movement for that scene type.
-Voiceover lines must be short, high-curiosity, natural documentary tone, one line per scene, matching 6-second clips.
-finalTiming should describe an 12s (2 scenes) or 18s (3 scenes) combined hook.`;
+i2vPrompt must tell the model to preserve the exact start frame, animate toward the end frame, and only animate subtle believable movement.
+Always return exactly 3 scenes. clipOrder must be 1,2,3.`;
 
 function asString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
-}
-
-function asNumber(v: unknown, fallback = 0): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 export async function planHook(input: {
@@ -141,16 +128,14 @@ Use attached-style recovered-footage realism: low-resolution camera, imperfect f
   }
 
   const rawScenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
-  let sceneCount: 2 | 3 = asNumber(parsed.sceneCount, rawScenes.length) === 2 ? 2 : 3;
-  if (rawScenes.length === 2) sceneCount = 2;
-  if (rawScenes.length >= 3) sceneCount = 3;
+  const sceneCount = SCENE_COUNT;
 
   const scenes: PlannedScene[] = rawScenes.slice(0, sceneCount).map((raw, i) => {
     const s = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
     return {
-      sceneNumber: asNumber(s.sceneNumber, i + 1),
+      sceneNumber: i + 1,
       purpose: asString(s.purpose, `Scene ${i + 1}`),
-      durationSec: 6,
+      durationSec: CLIP_SECONDS,
       whatViewerSees: asString(s.whatViewerSees),
       curiosity: asString(s.curiosity),
       evidenceStyle: asString(s.evidenceStyle, asString(parsed.evidenceStyle, "POV search")),
@@ -165,7 +150,7 @@ Use attached-style recovered-footage realism: low-resolution camera, imperfect f
     scenes.push({
       sceneNumber: n,
       purpose: "Partial reveal",
-      durationSec: 6,
+      durationSec: CLIP_SECONDS,
       whatViewerSees: "A closer, still-unclear recovered frame.",
       curiosity: "What is just out of focus?",
       evidenceStyle: "partial reveal",
@@ -175,35 +160,25 @@ Use attached-style recovered-footage realism: low-resolution camera, imperfect f
     });
   }
 
-  const vo = parsed.voiceover && typeof parsed.voiceover === "object"
-    ? (parsed.voiceover as Record<string, unknown>)
-    : {};
   const notes = parsed.editNotes && typeof parsed.editNotes === "object"
     ? (parsed.editNotes as Record<string, unknown>)
     : {};
 
-  const lines = Array.isArray(vo.lines) ? vo.lines.map((l) => String(l)).filter(Boolean) : [];
-  while (lines.length < sceneCount) lines.push("Something was recorded here that should not exist.");
-
-  const clipOrder = Array.isArray(notes.clipOrder)
-    ? notes.clipOrder.map((n) => asNumber(n)).filter((n) => n > 0)
-    : scenes.map((s) => s.sceneNumber);
-
   return {
     sceneCount,
-    whyThisStructure: asString(parsed.whyThisStructure, sceneCount === 2 ? "Faster two-beat proof hook." : "Escalation across three recovered clips."),
+    whyThisStructure: asString(parsed.whyThisStructure, "Three recovered beats: setup, closer look, partial reveal."),
     evidenceStyle: asString(parsed.evidenceStyle, "recovered expedition footage"),
     scenes,
     voiceover: {
-      language: asString(vo.language, "English"),
-      languageWhy: asString(vo.languageWhy, "Default English documentary narration."),
-      lines: lines.slice(0, sceneCount),
+      language: "none",
+      languageWhy: "Silent assemble. No voiceover.",
+      lines: [],
     },
     editNotes: {
-      clipOrder: clipOrder.length ? clipOrder : scenes.map((s) => s.sceneNumber),
+      clipOrder: sceneOrder(),
       soundDesign: asString(notes.soundDesign, "Room tone, tape hiss, no music sting."),
       overlayText: Array.isArray(notes.overlayText) ? notes.overlayText.map((t) => String(t)) : [],
-      finalTiming: asString(notes.finalTiming, `${sceneCount * 6} seconds (${sceneCount} × 6s silent Seedance clips).`),
+      finalTiming: asString(notes.finalTiming, `${FINAL_SECONDS} seconds (${SCENE_COUNT} × ${CLIP_SECONDS}s silent Seedance clips).`),
     },
   };
 }

@@ -9,7 +9,7 @@
     "postinstall": "prisma generate",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/jobs/planner.test.ts src/lib/ffmpeg.test.ts"
+    "test": "tsx --test src/lib/jobs/planner.test.ts src/lib/jobs/pipeline.test.ts src/lib/ffmpeg.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",

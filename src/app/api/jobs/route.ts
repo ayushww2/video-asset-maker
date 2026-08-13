@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
+import { hookProgressTotal, SCENE_COUNT } from "@/lib/jobs/pipeline";
 import { enqueueAllowed } from "@/lib/jobs/process";
 import { serializeJob } from "@/lib/serialize";
 import { getSessionFromCookies } from "@/lib/session";
@@ -45,8 +46,9 @@ export async function POST(req: NextRequest) {
       kind: "hook",
       ownerUsername: user.username,
       status: "queued",
+      sceneCount: SCENE_COUNT,
       progressDone: 0,
-      progressTotal: 15,
+      progressTotal: hookProgressTotal(),
     },
     include: { scenes: true },
   });

@@ -45,7 +45,7 @@ type Job = {
 type Capacity = { ok: boolean; used: number; cap: number };
 
 export default function StudioApp() {
-  const [mode, setMode] = useState<Mode>("clips");
+  const [mode, setMode] = useState<Mode>("hooks");
   const [capacity, setCapacity] = useState<Capacity | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,12 +53,12 @@ export default function StudioApp() {
     <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8">
       <header className="border-b border-[var(--line)] pb-6">
         <p className="font-[family-name:var(--font-ibm-plex-mono)] text-[0.7rem] uppercase tracking-[0.18em] text-[var(--accent)]">
-          Hook clip factory
+          18-second clip factory
         </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Clips, not stills</h1>
+        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Always 18 seconds</h1>
         <p className="mt-3 max-w-2xl text-[var(--muted)]">
-          This is not the AI scenes image maker. Use <strong className="text-[var(--text)]">Clips only</strong> to
-          animate stills you already have. The hook factory still plans frames when you need a full 18s piece.
+          Backend always makes 3 scenes, 2 frames each, converts each pair to one 6s clip, then assembles a silent 18s
+          piece. GPT Image 2 stills → Seedance 2.5 clips → silent assemble. Not ElevenLabs.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--muted)]">
           <span>
@@ -69,11 +69,11 @@ export default function StudioApp() {
           </button>
         </div>
         <div className="mt-6 flex gap-2">
-          <button className={mode === "clips" ? "btn" : "btn btn-ghost"} type="button" onClick={() => { setMode("clips"); setError(null); }}>
-            Clips only
-          </button>
           <button className={mode === "hooks" ? "btn" : "btn btn-ghost"} type="button" onClick={() => { setMode("hooks"); setError(null); }}>
-            Full hook
+            18s factory
+          </button>
+          <button className={mode === "clips" ? "btn" : "btn btn-ghost"} type="button" onClick={() => { setMode("clips"); setError(null); }}>
+            Stills in
           </button>
         </div>
       </header>
@@ -89,6 +89,18 @@ export default function StudioApp() {
   );
 }
 
+type ClipSceneDraft = {
+  prompt: string;
+  startFile: File | null;
+  endFile: File | null;
+  startUrl: string;
+  endUrl: string;
+};
+
+function emptyClipScenes(): ClipSceneDraft[] {
+  return [1, 2, 3].map(() => ({ prompt: "", startFile: null, endFile: null, startUrl: "", endUrl: "" }));
+}
+
 function ClipsSection({
   onCapacity,
   onError,
@@ -97,21 +109,18 @@ function ClipsSection({
   onError: (e: string | null) => void;
 }) {
   const [title, setTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [startUrl, setStartUrl] = useState("");
-  const [endUrl, setEndUrl] = useState("");
-  const [startFile, setStartFile] = useState<File | null>(null);
-  const [endFile, setEndFile] = useState<File | null>(null);
+  const [scenes, setScenes] = useState<ClipSceneDraft[]>(emptyClipScenes);
   const [job, setJob] = useState<Job | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [busy, setBusy] = useState(false);
-
-  const startPreview = useMemo(() => (startFile ? URL.createObjectURL(startFile) : startUrl || null), [startFile, startUrl]);
-  const endPreview = useMemo(() => (endFile ? URL.createObjectURL(endFile) : endUrl || null), [endFile, endUrl]);
   const progress = useMemo(() => {
     if (!job?.progressTotal) return 0;
     return Math.round((job.progressDone / job.progressTotal) * 100);
   }, [job]);
+
+  function patchScene(index: number, patch: Partial<ClipSceneDraft>) {
+    setScenes((prev) => prev.map((scene, i) => (i === index ? { ...scene, ...patch } : scene)));
+  }
 
   async function refreshList() {
     const res = await fetch("/api/jobs?kind=clip");
@@ -127,12 +136,15 @@ function ClipsSection({
     setBusy(true);
     try {
       const form = new FormData();
-      form.set("title", title.trim() || "Clip");
-      form.set("prompt", prompt.trim());
-      if (startFile) form.set("start", startFile);
-      if (endFile) form.set("end", endFile);
-      if (startUrl.trim()) form.set("startUrl", startUrl.trim());
-      if (endUrl.trim()) form.set("endUrl", endUrl.trim());
+      form.set("title", title.trim() || "18s clip");
+      scenes.forEach((scene, i) => {
+        const n = i + 1;
+        form.set(`prompt${n}`, scene.prompt.trim());
+        if (scene.startFile) form.set(`start${n}`, scene.startFile);
+        if (scene.endFile) form.set(`end${n}`, scene.endFile);
+        if (scene.startUrl.trim()) form.set(`startUrl${n}`, scene.startUrl.trim());
+        if (scene.endUrl.trim()) form.set(`endUrl${n}`, scene.endUrl.trim());
+      });
       const res = await fetch("/api/clips", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Clip submit failed");
@@ -156,62 +168,72 @@ function ClipsSection({
 
   useJobPoll(job, setJob, refreshList);
 
-  const canSubmit = Boolean(prompt.trim() && (startFile || startUrl.trim()) && !busy);
+  const canSubmit = scenes.every((scene) => {
+    const start = scene.startFile || scene.startUrl.trim();
+    const end = scene.endFile || scene.endUrl.trim();
+    return Boolean(scene.prompt.trim() && start && end && !busy);
+  });
 
   return (
     <>
       <section className="panel space-y-4 p-5">
         <div>
-          <h2 className="text-2xl font-semibold">Make a clip</h2>
+          <h2 className="text-2xl font-semibold">18s from existing stills</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Drop in a start still (end still optional). Seedance 2.5 turns it into a silent 6s 480p clip. No image
-            generation.
+            Three scenes, start + end still each. Seedance 2.5 makes three 6s clips, then one silent 18s assemble. No
+            GPT Image.
           </p>
         </div>
         <div>
           <label className="label" htmlFor="clip-title">
             Label (optional)
           </label>
-          <input id="clip-title" className="field" placeholder="Nile ROV — scene 1" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input id="clip-title" className="field" placeholder="Nile ROV hook" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <StillPicker
-            id="start"
-            label="Start still"
-            file={startFile}
-            url={startUrl}
-            preview={startPreview}
-            onFile={setStartFile}
-            onUrl={setStartUrl}
-          />
-          <StillPicker
-            id="end"
-            label="End still (optional)"
-            file={endFile}
-            url={endUrl}
-            preview={endPreview}
-            onFile={setEndFile}
-            onUrl={setEndUrl}
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="clip-prompt">
-            Motion prompt
-          </label>
-          <textarea
-            id="clip-prompt"
-            className="field min-h-28 resize-y"
-            placeholder="Slow handheld drift, dust in the lamp beam, the object stays locked in frame…"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-        </div>
+        {scenes.map((scene, index) => (
+          <article key={index} className="space-y-3 border-t border-[var(--line)] pt-4">
+            <h3 className="text-lg font-medium">Scene {index + 1}</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <StillPicker
+                id={`start-${index + 1}`}
+                label="Start still"
+                file={scene.startFile}
+                url={scene.startUrl}
+                preview={scene.startFile ? URL.createObjectURL(scene.startFile) : scene.startUrl || null}
+                onFile={(file) => patchScene(index, { startFile: file })}
+                onUrl={(url) => patchScene(index, { startUrl: url })}
+              />
+              <StillPicker
+                id={`end-${index + 1}`}
+                label="End still"
+                file={scene.endFile}
+                url={scene.endUrl}
+                preview={scene.endFile ? URL.createObjectURL(scene.endFile) : scene.endUrl || null}
+                onFile={(file) => patchScene(index, { endFile: file })}
+                onUrl={(url) => patchScene(index, { endUrl: url })}
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor={`clip-prompt-${index + 1}`}>
+                Motion prompt
+              </label>
+              <textarea
+                id={`clip-prompt-${index + 1}`}
+                className="field min-h-24 resize-y"
+                placeholder="Slow handheld drift toward the end frame…"
+                value={scene.prompt}
+                onChange={(e) => patchScene(index, { prompt: e.target.value })}
+              />
+            </div>
+          </article>
+        ))}
         <button className="btn" type="button" disabled={!canSubmit} onClick={() => void submit()}>
-          {busy ? "Queueing…" : "Make 6s clip"}
+          {busy ? "Queueing…" : "Make 18s clip"}
         </button>
       </section>
 
-      {job ? <JobResult job={job} progress={progress} clipMode /> : null}
+      {job ? <JobResult job={job} progress={progress} /> : null}
+      {job?.scenes?.length ? <SceneGrid scenes={job.scenes} /> : null}
 
       {jobs.length > 0 ? <RecentJobs jobs={jobs} onSelect={setJob} /> : null}
     </>
@@ -278,10 +300,10 @@ function HooksSection({
     <>
       <section className="panel space-y-4 p-5">
         <div>
-          <h2 className="text-2xl font-semibold">Full 18s hook</h2>
+          <h2 className="text-2xl font-semibold">18s factory</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Title in. Plans recovered start/end frames, Seedance 2.5 clips, then one assembled hook. No voiceover. Use
-            Clips only if you already have stills.
+            Title in. Backend always plans 3 scenes, GPT Image 2 makes start + end for each, Seedance 2.5 turns each
+            pair into a 6s clip, then silent assemble to 18s. No voiceover. Not ElevenLabs.
           </p>
         </div>
         <div>
@@ -309,7 +331,7 @@ function HooksSection({
           />
         </div>
         <button className="btn" type="button" disabled={!title.trim() || busy} onClick={() => void submit()}>
-          {busy ? "Queueing…" : "Generate 18s hook"}
+          {busy ? "Queueing…" : "Generate 18s clip"}
         </button>
       </section>
 
@@ -367,20 +389,19 @@ function StillPicker({
   );
 }
 
-function JobResult({ job, progress, clipMode }: { job: Job; progress: number; clipMode?: boolean }) {
+function JobResult({ job, progress }: { job: Job; progress: number }) {
   return (
     <section className="panel space-y-4 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold">{job.title}</h2>
           <p className="mt-1 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--accent)]">
-            {job.status}
-            {clipMode ? " · 6s clip" : ` · ${job.sceneCount} scenes`}
+            {job.status} · 3 scenes · 18s
           </p>
         </div>
-        {job.finalVideoUrl || job.scenes[0]?.clipUrl ? (
-          <a className="btn" href={job.finalVideoUrl || job.scenes[0]?.clipUrl || "#"} target="_blank" rel="noreferrer">
-            Download clip
+        {job.finalVideoUrl ? (
+          <a className="btn" href={job.finalVideoUrl} target="_blank" rel="noreferrer">
+            Download 18s
           </a>
         ) : null}
       </div>
