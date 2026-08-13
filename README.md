@@ -1,18 +1,13 @@
-# Video Asset Maker
+# Hook clip factory
 
-Mystery-documentary **hook factory**. Paste a title. The backend:
+This repo is **not** the AI scenes image maker. Do **not** deploy it onto the existing Video Asset Maker Railway project (`video-asset-maker-production`). That service stays as the stills generator.
 
-1. Plans a 2- or 3-scene recovered-footage hook (GPT 5.6)
-2. Generates start + end frames per scene (GPT Image 2, low)
-3. Scans those frames and writes I2V prompts
-4. Animates each scene with **Seedance 1.5 Pro** (6s, 480p, silent)
-5. Builds ElevenLabs voiceover
-6. Concatenates clips on Railway into one **12s or 18s** hook
-7. Uploads stills, clips, VO, and final to R2
+This app has two studio sections:
 
-Sized for **20–30 hooks/day**.
+1. **Clips only** — upload or paste a start still (end still optional) + a motion prompt → **Seedance 1.5 Pro** 6s / 480p / silent clip. No GPT Image.
+2. **Full hook** — title in → plan → start/end frames → Seedance clips → ElevenLabs VO → 12s/18s assemble.
 
-Live: [video-asset-maker-production.up.railway.app](https://video-asset-maker-production.up.railway.app)
+Live (this product only): set after the new Railway project ships. Never overwrite the image-maker URL.
 
 ## Local
 
@@ -23,8 +18,8 @@ npx prisma db push
 npm run dev
 ```
 
-FFmpeg is required locally for the combine step.
+FFmpeg is required locally for combining multiple clips.
 
 ## Railway
 
-Dockerfile installs ffmpeg. Set ContactBox, GPT Image, `FAL_KEY` (Seedance), ElevenLabs, and R2 on the service. Do not commit secrets.
+Create a **new** project (example name: `hook-clip-factory`). Dockerfile installs ffmpeg. Set ContactBox, `FAL_KEY` (Seedance), ElevenLabs, R2, and auth on **that** service only. Do not commit secrets.

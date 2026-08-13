@@ -45,7 +45,7 @@ function LoginForm() {
       <div className="panel space-y-5 p-6">
         <div>
           <p className="font-[family-name:var(--font-ibm-plex-mono)] text-[0.7rem] uppercase tracking-[0.18em] text-[var(--accent)]">
-            Video Asset Maker
+            Hook clip factory
           </p>
           <h1 className="mt-2 text-3xl font-semibold">Sign in</h1>
         </div>

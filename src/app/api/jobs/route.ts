@@ -4,11 +4,13 @@ import { enqueueAllowed } from "@/lib/jobs/process";
 import { serializeJob } from "@/lib/serialize";
 import { getSessionFromCookies } from "@/lib/session";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getSessionFromCookies();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const kind = req.nextUrl.searchParams.get("kind");
   const [jobs, capacity] = await Promise.all([
     prisma.hookJob.findMany({
+      where: kind === "clip" || kind === "hook" ? { kind } : undefined,
       orderBy: { createdAt: "desc" },
       take: 30,
       include: { scenes: { orderBy: { sceneNumber: "asc" } } },
@@ -40,6 +42,7 @@ export async function POST(req: NextRequest) {
     data: {
       title,
       script: body.script?.trim() || null,
+      kind: "hook",
       ownerUsername: user.username,
       status: "queued",
       progressDone: 0,

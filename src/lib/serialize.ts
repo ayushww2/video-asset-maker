@@ -6,6 +6,7 @@ export function serializeJob(job: HookJob & { scenes?: HookScene[] }) {
     id: job.id,
     title: job.title,
     script: job.script,
+    kind: job.kind,
     ownerUsername: job.ownerUsername,
     status: job.status,
     sceneCount: job.sceneCount,

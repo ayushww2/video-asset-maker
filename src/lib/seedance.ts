@@ -11,26 +11,44 @@ export function withI2vSuffix(prompt: string): string {
   return `${trimmed}\n\n${I2V_SUFFIX}`;
 }
 
+export function seedanceRequestBody(input: {
+  prompt: string;
+  startImageUrl: string;
+  endImageUrl?: string | null;
+}) {
+  const body: {
+    prompt: string;
+    image_url: string;
+    end_image_url?: string;
+    aspect_ratio: "16:9";
+    resolution: "480p";
+    duration: "6";
+    generate_audio: false;
+    camera_fixed: false;
+  } = {
+    prompt: withI2vSuffix(input.prompt),
+    image_url: input.startImageUrl,
+    aspect_ratio: "16:9",
+    resolution: "480p",
+    duration: "6",
+    generate_audio: false,
+    camera_fixed: false,
+  };
+  if (input.endImageUrl) body.end_image_url = input.endImageUrl;
+  return body;
+}
+
 export async function generateSeedanceClip(input: {
   prompt: string;
   startImageUrl: string;
-  endImageUrl: string;
+  endImageUrl?: string | null;
 }): Promise<Buffer> {
   const key = process.env.FAL_KEY || "";
   if (!key) throw new Error("FAL_KEY is not set (needed for Seedance 1.5 Pro)");
   fal.config({ credentials: key });
 
   const result = await fal.subscribe(MODEL, {
-    input: {
-      prompt: withI2vSuffix(input.prompt),
-      image_url: input.startImageUrl,
-      end_image_url: input.endImageUrl,
-      aspect_ratio: "16:9",
-      resolution: "480p",
-      duration: "6",
-      generate_audio: false,
-      camera_fixed: false,
-    },
+    input: seedanceRequestBody(input),
     logs: false,
   });
 

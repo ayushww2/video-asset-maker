@@ -35,6 +35,11 @@ async function processJob(jobId: string) {
     return;
   }
 
+  if (job.kind === "clip") {
+    await processClipJob(jobId);
+    return;
+  }
+
   try {
     let plan = job.plan as HookPlan | null;
     if (!plan?.scenes?.length) {
@@ -152,8 +157,8 @@ async function processJob(jobId: string) {
         await setProgress(jobId, done);
         continue;
       }
-      if (!scene.startImageUrl || !scene.endImageUrl) {
-        throw new Error(`Scene ${scene.sceneNumber} missing start/end frames`);
+      if (!scene.startImageUrl) {
+        throw new Error(`Scene ${scene.sceneNumber} missing start frame`);
       }
       await prisma.hookScene.update({ where: { id: scene.id }, data: { status: "animating" } });
       const clip = await generateSeedanceClip({
@@ -236,6 +241,92 @@ async function processJob(jobId: string) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Hook job failed";
+    await prisma.hookJob.update({
+      where: { id: jobId },
+      data: { status: "failed", error: message, completedAt: new Date() },
+    });
+  }
+}
+
+async function processClipJob(jobId: string) {
+  const job = await prisma.hookJob.findUnique({
+    where: { id: jobId },
+    include: { scenes: { orderBy: { sceneNumber: "asc" } } },
+  });
+  if (!job) return;
+
+  try {
+    await prisma.hookJob.update({ where: { id: jobId }, data: { status: "animating" } });
+    const scenes = await prisma.hookScene.findMany({
+      where: { jobId },
+      orderBy: { sceneNumber: "asc" },
+    });
+    if (!scenes.length) throw new Error("Clip job has no stills");
+
+    let done = 0;
+    for (const scene of scenes) {
+      if (scene.clipUrl) {
+        done += 1;
+        await setProgress(jobId, done);
+        continue;
+      }
+      if (!scene.startImageUrl) throw new Error(`Clip ${scene.sceneNumber} needs a start still`);
+      await prisma.hookScene.update({ where: { id: scene.id }, data: { status: "animating" } });
+      const clip = await generateSeedanceClip({
+        prompt: scene.i2vPrompt || "",
+        startImageUrl: scene.startImageUrl,
+        endImageUrl: scene.endImageUrl,
+      });
+      const key = `clips/${jobId}/scene-${scene.sceneNumber}.mp4`;
+      const uploaded = await uploadToR2({ key, body: clip, contentType: "video/mp4" });
+      await prisma.hookScene.update({
+        where: { id: scene.id },
+        data: { clipUrl: uploaded.url, clipKey: uploaded.key, status: "done" },
+      });
+      done += 1;
+      await setProgress(jobId, done);
+    }
+
+    const finished = await prisma.hookScene.findMany({
+      where: { jobId },
+      orderBy: { sceneNumber: "asc" },
+    });
+    const withClips = finished.filter((s) => s.clipUrl);
+    if (!withClips.length) throw new Error("Seedance returned no clips");
+
+    let finalUrl = withClips[0].clipUrl!;
+    let finalKey = withClips[0].clipKey;
+    if (withClips.length > 1) {
+      await prisma.hookJob.update({ where: { id: jobId }, data: { status: "combining" } });
+      const clipBuffers: Buffer[] = [];
+      for (const scene of withClips) {
+        const res = await fetch(scene.clipUrl!, { signal: AbortSignal.timeout(120_000) });
+        if (!res.ok) throw new Error(`Failed to fetch clip ${scene.sceneNumber}`);
+        clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+      }
+      const combined = await combineHookClips({ clipBuffers, voiceover: null });
+      const uploaded = await uploadToR2({
+        key: `clips/${jobId}/final.mp4`,
+        body: combined,
+        contentType: "video/mp4",
+      });
+      finalUrl = uploaded.url;
+      finalKey = uploaded.key;
+    }
+
+    await prisma.hookJob.update({
+      where: { id: jobId },
+      data: {
+        status: "completed",
+        finalVideoUrl: finalUrl,
+        finalVideoKey: finalKey,
+        progressDone: job.progressTotal || done,
+        completedAt: new Date(),
+        error: null,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Clip job failed";
     await prisma.hookJob.update({
       where: { id: jobId },
       data: { status: "failed", error: message, completedAt: new Date() },

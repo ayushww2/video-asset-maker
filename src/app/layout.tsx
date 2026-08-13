@@ -16,8 +16,8 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Video Asset Maker",
-  description: "Mystery-documentary hook footage: recovered stills to 18-second assembled clips.",
+  title: "Hook clip factory",
+  description: "Stills in, Seedance 6s clips out. Separate from the AI scenes image maker.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
