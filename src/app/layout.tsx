@@ -17,13 +17,16 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Video Asset Maker",
-  description: "Video Asset Maker",
+  description: "Mystery-documentary hook footage: recovered stills to 18-second assembled clips.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${newsreader.variable} ${ibmPlexMono.variable} h-full`}>
-      <body className="min-h-full flex flex-col antialiased">{children}</body>
+      <body className="min-h-full flex flex-col antialiased">
+        <div className="grain" aria-hidden="true" />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model HookJob {
+  id                 String      @id @default(uuid()) @db.Uuid
+  title              String
+  script             String?
+  ownerUsername      String?     @map("owner_username")
+  status             String      @default("queued")
+  sceneCount         Int         @default(3) @map("scene_count")
+  plan               Json?
+  voiceoverText      String?     @map("voiceover_text")
+  voiceoverLanguage  String?     @map("voiceover_language")
+  voiceoverUrl       String?     @map("voiceover_url")
+  voiceoverKey       String?     @map("voiceover_key")
+  assembleNotes      Json?       @map("assemble_notes")
+  finalVideoUrl      String?     @map("final_video_url")
+  finalVideoKey      String?     @map("final_video_key")
+  error              String?
+  progressDone       Int         @default(0) @map("progress_done")
+  progressTotal      Int         @default(15) @map("progress_total")
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  completedAt        DateTime?   @map("completed_at") @db.Timestamptz(6)
+  scenes             HookScene[]
+
+  @@index([createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("hook_jobs")
+}
+
+model HookScene {
+  id              String    @id @default(uuid()) @db.Uuid
+  jobId           String    @map("job_id") @db.Uuid
+  sceneNumber     Int       @map("scene_number")
+  purpose         String?
+  durationSec     Int       @default(6) @map("duration_sec")
+  whatViewerSees  String?   @map("what_viewer_sees")
+  curiosity       String?
+  startPrompt     String?   @map("start_prompt")
+  endPrompt       String?   @map("end_prompt")
+  i2vPrompt       String?   @map("i2v_prompt")
+  startImageUrl   String?   @map("start_image_url")
+  endImageUrl     String?   @map("end_image_url")
+  startImageKey   String?   @map("start_image_key")
+  endImageKey     String?   @map("end_image_key")
+  clipUrl         String?   @map("clip_url")
+  clipKey         String?   @map("clip_key")
+  frameAnalysis   Json?     @map("frame_analysis")
+  status          String    @default("pending")
+  error           String?
+  job             HookJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, sceneNumber])
+  @@index([jobId])
+  @@map("hook_scenes")
+}
