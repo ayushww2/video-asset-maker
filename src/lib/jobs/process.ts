@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/db";
-import { generateVoiceover } from "@/lib/elevenlabs";
 import { combineHookClips } from "@/lib/ffmpeg";
 import { generateGptImage } from "@/lib/images/gptImage";
 import { analyzeAssembly, analyzeStartEndFrames } from "@/lib/jobs/analyzeFrames";
-import { planHook, voiceoverScript, type HookPlan } from "@/lib/jobs/planner";
+import { planHook, type HookPlan } from "@/lib/jobs/planner";
 import { maxHooksPerDay } from "@/lib/env";
 import { uploadToR2 } from "@/lib/r2";
 import { generateSeedanceClip } from "@/lib/seedance";
@@ -45,14 +44,12 @@ async function processJob(jobId: string) {
     if (!plan?.scenes?.length) {
       await prisma.hookJob.update({ where: { id: jobId }, data: { status: "planning" } });
       plan = await planHook({ title: job.title, script: job.script });
-      const total = 1 + plan.sceneCount * 4 + 2;
+      const total = 1 + plan.sceneCount * 4 + 1;
       await prisma.hookJob.update({
         where: { id: jobId },
         data: {
           plan: plan as object,
           sceneCount: plan.sceneCount,
-          voiceoverText: voiceoverScript(plan),
-          voiceoverLanguage: plan.voiceover.language,
           progressTotal: total,
           progressDone: 1,
           status: "imaging",
@@ -176,28 +173,6 @@ async function processJob(jobId: string) {
       await setProgress(jobId, done);
     }
 
-    await prisma.hookJob.update({ where: { id: jobId }, data: { status: "voicing" } });
-    let voiceoverUrl = job.voiceoverUrl;
-    let voiceoverKey = job.voiceoverKey;
-    let voBuffer: Buffer | null = null;
-    const voText = job.voiceoverText || (plan ? voiceoverScript(plan) : "");
-    if (voText) {
-      voBuffer = await generateVoiceover(voText);
-      const uploaded = await uploadToR2({
-        key: `hooks/${jobId}/voiceover.mp3`,
-        body: voBuffer,
-        contentType: "audio/mpeg",
-      });
-      voiceoverUrl = uploaded.url;
-      voiceoverKey = uploaded.key;
-      await prisma.hookJob.update({
-        where: { id: jobId },
-        data: { voiceoverUrl, voiceoverKey },
-      });
-    }
-    done += 1;
-    await setProgress(jobId, done);
-
     await prisma.hookJob.update({ where: { id: jobId }, data: { status: "combining" } });
     const finalScenes = await prisma.hookScene.findMany({
       where: { jobId },
@@ -220,7 +195,11 @@ async function processJob(jobId: string) {
       if (!res.ok) throw new Error(`Failed to fetch scene ${scene.sceneNumber} clip`);
       clipBuffers.push(Buffer.from(await res.arrayBuffer()));
     }
-    const combined = await combineHookClips({ clipBuffers, voiceover: voBuffer });
+    if (!clipBuffers.length) throw new Error("No Seedance clips to assemble");
+    const combined =
+      clipBuffers.length === 1
+        ? clipBuffers[0]
+        : await combineHookClips({ clipBuffers, voiceover: null });
     const finalUpload = await uploadToR2({
       key: `hooks/${jobId}/final.mp4`,
       body: combined,

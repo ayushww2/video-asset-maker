@@ -164,7 +164,7 @@ function ClipsSection({
         <div>
           <h2 className="text-2xl font-semibold">Make a clip</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Drop in a start still (end still optional). Seedance 1.5 Pro turns it into a silent 6s 480p clip. No image
+            Drop in a start still (end still optional). Seedance 2.5 turns it into a silent 6s 480p clip. No image
             generation.
           </p>
         </div>
@@ -280,8 +280,8 @@ function HooksSection({
         <div>
           <h2 className="text-2xl font-semibold">Full 18s hook</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Title in. Plans recovered start/end frames, Seedance clips, voiceover, then one assembled hook. Use Clips
-            only if you already have stills.
+            Title in. Plans recovered start/end frames, Seedance 2.5 clips, then one assembled hook. No voiceover. Use
+            Clips only if you already have stills.
           </p>
         </div>
         <div>
@@ -398,13 +398,6 @@ function JobResult({ job, progress, clipMode }: { job: Job; progress: number; cl
             <span className="label">Why this structure</span>
             {job.plan.whyThisStructure}
           </p>
-        </div>
-      ) : null}
-      {job.voiceoverText ? (
-        <div>
-          <p className="label">Voiceover ({job.voiceoverLanguage || "English"})</p>
-          <p className="text-sm text-[var(--muted)]">{job.voiceoverText}</p>
-          {job.voiceoverUrl ? <audio className="mt-2 w-full" controls src={job.voiceoverUrl} /> : null}
         </div>
       ) : null}
       {job.scenes[0]?.i2vPrompt ? (
