@@ -7,7 +7,6 @@ healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 
-# Seedance 2 Mini is blocked from US IPs. Run the worker in the EU so ElevenLabs
-# sees a non-US region. Isolated residency APIs need a separate key and will not work.
-[deploy.multiRegionConfig."europe-west4-drams3a"]
+# Seedance 2 Mini is blocked from US IPs. Run the worker in Singapore.
+[deploy.multiRegionConfig."asia-southeast1-eqsg3a"]
 numReplicas = 1
