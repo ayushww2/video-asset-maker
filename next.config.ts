@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  serverExternalPackages: ["@prisma/client", "openai"],
-};
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
