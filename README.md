@@ -7,7 +7,9 @@ This app has two studio sections:
 1. **Clips only** — upload or paste a start still (end still optional) + a motion prompt → **Seedance 1.5 Pro** 6s / 480p / silent clip. No GPT Image.
 2. **Full hook** — title in → plan → start/end frames → Seedance clips → ElevenLabs VO → 12s/18s assemble.
 
-Live (this product only): set after the new Railway project ships. Never overwrite the image-maker URL.
+Live (this product only): [hook-clip-factory-production.up.railway.app](https://hook-clip-factory-production.up.railway.app)
+
+The AI scenes image maker stays at `video-asset-maker-production.up.railway.app`. Do not overwrite it.
 
 ## Local
 
