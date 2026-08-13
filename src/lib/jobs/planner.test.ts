@@ -23,7 +23,7 @@ test("clip-only Seedance body uses Mini at 480p and omits end frame when none is
   assert.equal(startOnly.model_id, "bytedance-seedance-v2-mini");
   assert.equal(startOnly.start_frame.content_base64, "AAAA");
   assert.equal("end_frame" in startOnly, false);
-  assert.equal(startOnly.duration_secs, 6);
+  assert.equal(startOnly.duration_secs, 4);
   assert.equal(startOnly.resolution, "480p");
   assert.equal(startOnly.generate_audio, false);
   assert.equal(startOnly.aspect_ratio, "16:9");

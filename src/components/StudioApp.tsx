@@ -53,11 +53,11 @@ export default function StudioApp() {
     <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8">
       <header className="border-b border-[var(--line)] pb-6">
         <p className="font-[family-name:var(--font-ibm-plex-mono)] text-[0.7rem] uppercase tracking-[0.18em] text-[var(--accent)]">
-          18-second clip factory
+          12-second clip factory
         </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Always 18 seconds</h1>
+        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Always 12 seconds</h1>
         <p className="mt-3 max-w-2xl text-[var(--muted)]">
-          Backend always makes 3 scenes, 2 frames each, converts each pair to one 6s clip, then assembles a silent 18s
+          Backend always makes 3 scenes, 2 frames each, converts each pair to one 4s clip, then assembles a silent 12s
           piece. GPT Image 2 stills via ElevenLabs → Seedance 2.0 Mini 480p clips → silent assemble.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--muted)]">
@@ -70,7 +70,7 @@ export default function StudioApp() {
         </div>
         <div className="mt-6 flex gap-2">
           <button className={mode === "hooks" ? "btn" : "btn btn-ghost"} type="button" onClick={() => { setMode("hooks"); setError(null); }}>
-            18s factory
+            12s factory
           </button>
           <button className={mode === "clips" ? "btn" : "btn btn-ghost"} type="button" onClick={() => { setMode("clips"); setError(null); }}>
             Stills in
@@ -136,7 +136,7 @@ function ClipsSection({
     setBusy(true);
     try {
       const form = new FormData();
-      form.set("title", title.trim() || "18s clip");
+      form.set("title", title.trim() || "12s clip");
       scenes.forEach((scene, i) => {
         const n = i + 1;
         form.set(`prompt${n}`, scene.prompt.trim());
@@ -178,9 +178,9 @@ function ClipsSection({
     <>
       <section className="panel space-y-4 p-5">
         <div>
-          <h2 className="text-2xl font-semibold">18s from existing stills</h2>
+          <h2 className="text-2xl font-semibold">12s from existing stills</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Three scenes, start + end still each. Seedance 2.0 Mini (480p) makes three 6s clips, then one silent 18s assemble. No
+            Three scenes, start + end still each. Seedance 2.0 Mini (480p) makes three 4s clips, then one silent 12s assemble. No
             GPT Image.
           </p>
         </div>
@@ -228,7 +228,7 @@ function ClipsSection({
           </article>
         ))}
         <button className="btn" type="button" disabled={!canSubmit} onClick={() => void submit()}>
-          {busy ? "Queueing…" : "Make 18s clip"}
+          {busy ? "Queueing…" : "Make 12s clip"}
         </button>
       </section>
 
@@ -300,10 +300,10 @@ function HooksSection({
     <>
       <section className="panel space-y-4 p-5">
         <div>
-          <h2 className="text-2xl font-semibold">18s factory</h2>
+          <h2 className="text-2xl font-semibold">12s factory</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
             Title in. Backend always plans 3 scenes, ElevenLabs GPT Image 2 makes start + end for each, Seedance 2.0 Mini
-            (480p) turns each pair into a 6s clip, then silent assemble to 18s. No voiceover.
+            (480p) turns each pair into a 4s clip, then silent assemble to 12s. No voiceover.
           </p>
         </div>
         <div>
@@ -331,7 +331,7 @@ function HooksSection({
           />
         </div>
         <button className="btn" type="button" disabled={!title.trim() || busy} onClick={() => void submit()}>
-          {busy ? "Queueing…" : "Generate 18s clip"}
+          {busy ? "Queueing…" : "Generate 12s clip"}
         </button>
       </section>
 
@@ -396,12 +396,12 @@ function JobResult({ job, progress }: { job: Job; progress: number }) {
         <div>
           <h2 className="text-2xl font-semibold">{job.title}</h2>
           <p className="mt-1 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--accent)]">
-            {job.status} · 3 scenes · 18s
+            {job.status} · 3 scenes · 12s
           </p>
         </div>
         {job.finalVideoUrl ? (
           <a className="btn" href={job.finalVideoUrl} target="_blank" rel="noreferrer">
-            Download 18s
+            Download 12s
           </a>
         ) : null}
       </div>

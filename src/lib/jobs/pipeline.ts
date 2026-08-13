@@ -1,5 +1,5 @@
 export const SCENE_COUNT = 3;
-export const CLIP_SECONDS = 6;
+export const CLIP_SECONDS = 4;
 export const FINAL_SECONDS = SCENE_COUNT * CLIP_SECONDS;
 
 export function hookProgressTotal(): number {

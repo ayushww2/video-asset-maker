@@ -33,7 +33,7 @@ export type HookPlan = {
 };
 
 const SYSTEM = `You are a senior YouTube mystery-documentary hook designer.
-Create a realistic 3-scene hook footage plan. The backend ALWAYS makes exactly 3 scenes, 2 frames each, then 3 silent 6-second clips, then one 18-second assemble. Never plan 2 scenes. Never plan voiceover.
+Create a realistic 3-scene hook footage plan. The backend ALWAYS makes exactly 3 scenes, 2 frames each, then 3 silent 4-second clips, then one 12-second assemble. Never plan 2 scenes. Never plan voiceover.
 
 Feel: real, low-quality, believable, old POV / camcorder / bodycam / CCTV / expedition footage, early 2000s or rough field-recording when appropriate.
 Must NOT look like polished AI art, fantasy, or cinematic trailer shots.
@@ -71,7 +71,7 @@ Return ONLY JSON with this shape:
   "scenes": [{
     "sceneNumber": number,
     "purpose": string,
-    "durationSec": 6,
+    "durationSec": 4,
     "whatViewerSees": string,
     "curiosity": string,
     "evidenceStyle": string,
@@ -83,7 +83,7 @@ Return ONLY JSON with this shape:
     "clipOrder": [1, 2, 3],
     "soundDesign": string,
     "overlayText": string[],
-    "finalTiming": "18 seconds (3 × 6s silent Seedance clips)"
+    "finalTiming": "12 seconds (3 × 4s silent Seedance Mini 480p clips)"
   }
 }
 

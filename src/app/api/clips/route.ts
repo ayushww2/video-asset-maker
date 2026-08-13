@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   }
 
   const form = await req.formData();
-  const title = String(form.get("title") || "").trim() || "18s clip";
+  const title = String(form.get("title") || "").trim() || "12s clip";
 
   const job = await prisma.hookJob.create({
     data: {

@@ -1,4 +1,5 @@
 import { createContactBoxClient, plannerModel } from "@/lib/contactbox";
+import { CLIP_SECONDS } from "@/lib/jobs/pipeline";
 import { withI2vSuffix } from "@/lib/seedance";
 
 export type FrameAnalysis = {
@@ -26,7 +27,7 @@ export async function analyzeStartEndFrames(input: {
         content: `You scan start-frame and end-frame stills for a YouTube mystery hook.
 Return JSON: {"realismNotes": string, "motionAdvice": string, "refinedI2vPrompt": string}
 refinedI2vPrompt must preserve the exact uploaded start frame, animate only toward the end frame, keep recovered-footage realism, and include no new objects, no readable text, no cinematic look.
-Scene type: ${input.evidenceStyle}. Clip length: 6 seconds, 480p, silent.`,
+Scene type: ${input.evidenceStyle}. Clip length: ${CLIP_SECONDS} seconds, 480p, silent.`,
       },
       {
         role: "user",

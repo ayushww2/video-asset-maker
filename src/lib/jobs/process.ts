@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { combineHookClips } from "@/lib/ffmpeg";
 import { generateGptImage } from "@/lib/images/gptImage";
 import { analyzeStartEndFrames } from "@/lib/jobs/analyzeFrames";
-import { CLIP_SECONDS, SCENE_COUNT, hookProgressTotal, sceneOrder } from "@/lib/jobs/pipeline";
+import { CLIP_SECONDS, FINAL_SECONDS, SCENE_COUNT, hookProgressTotal, sceneOrder } from "@/lib/jobs/pipeline";
 import { planHook, type HookPlan } from "@/lib/jobs/planner";
 import { maxHooksPerDay } from "@/lib/env";
 import { uploadToR2 } from "@/lib/r2";
@@ -179,7 +179,7 @@ async function processJob(jobId: string) {
       orderBy: { sceneNumber: "asc" },
     });
     if (finalScenes.length !== SCENE_COUNT) {
-      throw new Error(`Need ${SCENE_COUNT} scenes for an 18s assemble, got ${finalScenes.length}`);
+      throw new Error(`Need ${SCENE_COUNT} scenes for a ${FINAL_SECONDS}s assemble, got ${finalScenes.length}`);
     }
     const ordered = sceneOrder()
       .map((n) => finalScenes.find((s) => s.sceneNumber === n))
@@ -205,7 +205,7 @@ async function processJob(jobId: string) {
         status: "completed",
         assembleNotes: {
           clipOrder: sceneOrder(),
-          reason: "Fixed 18s assemble: scene 1 → 2 → 3, 6s each, silent.",
+          reason: `Fixed ${FINAL_SECONDS}s assemble: scene 1 → 2 → 3, ${CLIP_SECONDS}s each, silent Mini 480p.`,
         },
         finalVideoUrl: finalUpload.url,
         finalVideoKey: finalUpload.key,
@@ -237,7 +237,7 @@ async function processClipJob(jobId: string) {
       orderBy: { sceneNumber: "asc" },
     });
     if (scenes.length !== SCENE_COUNT) {
-      throw new Error(`Clip jobs need ${SCENE_COUNT} scenes (start+end each) for an 18s assemble`);
+      throw new Error(`Clip jobs need ${SCENE_COUNT} scenes (start+end each) for a ${FINAL_SECONDS}s assemble`);
     }
 
     let done = 0;
@@ -271,7 +271,7 @@ async function processClipJob(jobId: string) {
       orderBy: { sceneNumber: "asc" },
     });
     const withClips = finished.filter((s) => s.clipUrl);
-    if (withClips.length !== SCENE_COUNT) throw new Error("Need 3 Seedance clips to assemble 18s");
+    if (withClips.length !== SCENE_COUNT) throw new Error(`Need ${SCENE_COUNT} Seedance clips to assemble ${FINAL_SECONDS}s`);
 
     await prisma.hookJob.update({ where: { id: jobId }, data: { status: "combining" } });
     const clipBuffers: Buffer[] = [];
