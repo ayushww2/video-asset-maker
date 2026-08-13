@@ -20,7 +20,8 @@ test("clip-only Seedance body omits end frame when none is given", () => {
   assert.equal(startOnly.duration, "6");
   assert.equal(startOnly.resolution, "480p");
   assert.equal(startOnly.generate_audio, false);
-  assert.equal(startOnly.aspect_ratio, "auto");
+  assert.equal(startOnly.aspect_ratio, "16:9");
+  assert.equal(startOnly.camera_fixed, false);
 
   const both = seedanceRequestBody({
     prompt: "Cut on action.",

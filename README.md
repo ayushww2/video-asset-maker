@@ -1,18 +1,10 @@
 # Hook clip factory
 
-This repo is **not** the AI scenes image maker. Do **not** deploy it onto the existing Video Asset Maker Railway project.
+Every job is an **18-second silent clip**: 3 scenes × 2 frames → 3 clips → concat.
 
-Every job is an **18-second silent clip**. The backend always:
-
-1. Makes **3 scenes**
-2. Makes **2 frames per scene** (start + end)
-3. Converts each pair into **one 6s Seedance clip**
-4. Concatenates to **18s**
-
-Providers:
-
-- **GPT Image 2** (ContactBox) — stills on the factory path
-- **Seedance 2.5** (Fal) — image-to-video
-- **Not ElevenLabs.** ElevenLabs is voice-only and is not used. GPT Image and Seedance are not 11 Labs models.
+- **GPT Image 2** via **ElevenLabs** (`POST /v1/flows/image`, `model_id: gpt-image-2`)
+- **Seedance 1.5 Pro** via **Fal** (`fal-ai/bytedance/seedance/v1.5/pro/image-to-video`) — ElevenLabs Flows does not expose Seedance 1.5 Pro (only Seedance 2 / 2.5)
+- Planning still uses ContactBox GPT 5.6
+- No voiceover
 
 Live: [hook-clip-factory-production.up.railway.app](https://hook-clip-factory-production.up.railway.app)
