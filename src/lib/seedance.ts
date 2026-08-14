@@ -1,8 +1,8 @@
-import { createAndWaitForMedia, downloadMedia } from "@/lib/elevenlabs/flows";
+import { createGateway, experimental_generateVideo as generateVideo } from "ai";
 import { CLIP_SECONDS } from "@/lib/jobs/pipeline";
 
-export const SEEDANCE_MODEL_ID = "bytedance-seedance-v2-mini";
-export const SEEDANCE_RESOLUTION = "480p" as const;
+export const SEEDANCE_MODEL_ID = "bytedance/seedance-v1.5-pro";
+export const SEEDANCE_RESOLUTION = "854x480" as const;
 
 export const I2V_SUFFIX =
   "Use the uploaded image as the exact reference frame. Preserve the same composition, objects, lighting, and documentary style. Do not redesign the scene. Animate only subtle believable movement. Keep the motion practical, restrained, and realistic, as if this is real recovered footage.";
@@ -13,59 +13,38 @@ export function withI2vSuffix(prompt: string): string {
   return `${trimmed}\n\n${I2V_SUFFIX}`;
 }
 
-type InlineFrame = {
-  type: "inline_base64";
-  content_base64: string;
-  mime_type: "image/jpeg" | "image/png" | "image/webp";
+export type SeedanceFrameImage = {
+  image: string;
+  frameType: "first_frame" | "last_frame";
 };
 
-export function seedanceRequestBody(input: {
+export function gatewayApiKey(): string {
+  return (process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_AI_GATEWAY_API_KEY || "").trim();
+}
+
+export function seedanceRequest(input: {
   prompt: string;
-  startFrame: InlineFrame;
-  endFrame?: InlineFrame | null;
+  startImageUrl: string;
+  endImageUrl?: string | null;
 }) {
-  const body: {
-    model_id: typeof SEEDANCE_MODEL_ID;
-    prompt: string;
-    aspect_ratio: "16:9";
-    resolution: typeof SEEDANCE_RESOLUTION;
-    duration_secs: number;
-    generate_audio: false;
-    start_frame: InlineFrame;
-    end_frame?: InlineFrame;
-  } = {
-    model_id: SEEDANCE_MODEL_ID,
-    prompt: withI2vSuffix(input.prompt),
-    aspect_ratio: "16:9",
-    resolution: SEEDANCE_RESOLUTION,
-    duration_secs: CLIP_SECONDS,
-    generate_audio: false,
-    start_frame: input.startFrame,
-  };
-  if (input.endFrame) body.end_frame = input.endFrame;
-  return body;
-}
-
-function sniffImageMime(bytes: Buffer, contentType: string | null): InlineFrame["mime_type"] {
-  const header = (contentType || "").split(";")[0].trim().toLowerCase();
-  if (header === "image/jpeg" || header === "image/jpg") return "image/jpeg";
-  if (header === "image/webp") return "image/webp";
-  if (header === "image/png") return "image/png";
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (bytes.length >= 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") {
-    return "image/webp";
+  const frameImages: SeedanceFrameImage[] = [{ image: input.startImageUrl, frameType: "first_frame" }];
+  if (input.endImageUrl) {
+    frameImages.push({ image: input.endImageUrl, frameType: "last_frame" });
   }
-  return "image/png";
-}
-
-async function fetchInlineFrame(url: string): Promise<InlineFrame> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-  if (!res.ok) throw new Error(`Failed to download Seedance frame (${res.status})`);
-  const bytes = Buffer.from(await res.arrayBuffer());
   return {
-    type: "inline_base64",
-    content_base64: bytes.toString("base64"),
-    mime_type: sniffImageMime(bytes, res.headers.get("content-type")),
+    model: SEEDANCE_MODEL_ID,
+    prompt: withI2vSuffix(input.prompt),
+    duration: CLIP_SECONDS,
+    aspectRatio: "16:9" as const,
+    resolution: SEEDANCE_RESOLUTION,
+    generateAudio: false as const,
+    frameImages,
+    providerOptions: {
+      bytedance: {
+        watermark: false,
+        pollTimeoutMs: 600_000,
+      },
+    },
   };
 }
 
@@ -74,12 +53,27 @@ export async function generateSeedanceClip(input: {
   startImageUrl: string;
   endImageUrl?: string | null;
 }): Promise<Buffer> {
-  const startFrame = await fetchInlineFrame(input.startImageUrl);
-  const endFrame = input.endImageUrl ? await fetchInlineFrame(input.endImageUrl) : null;
-  const result = await createAndWaitForMedia({
-    kind: "video",
-    body: seedanceRequestBody({ prompt: input.prompt, startFrame, endFrame }),
-    timeoutMs: 300_000,
+  const apiKey = gatewayApiKey();
+  if (!apiKey) throw new Error("AI_GATEWAY_API_KEY is not set");
+
+  const gateway = createGateway({ apiKey });
+  const request = seedanceRequest(input);
+  const result = await generateVideo({
+    model: gateway.video(SEEDANCE_MODEL_ID),
+    prompt: request.prompt,
+    duration: request.duration,
+    aspectRatio: request.aspectRatio,
+    resolution: request.resolution,
+    generateAudio: request.generateAudio,
+    frameImages: request.frameImages,
+    providerOptions: request.providerOptions,
+    poll: {
+      intervalMs: 5_000,
+      timeoutMs: 600_000,
+    },
   });
-  return downloadMedia(result.url);
+
+  const bytes = result.video?.uint8Array;
+  if (!bytes?.length) throw new Error("Seedance 1.5 Pro returned no video");
+  return Buffer.from(bytes);
 }

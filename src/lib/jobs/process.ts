@@ -205,7 +205,7 @@ async function processJob(jobId: string) {
         status: "completed",
         assembleNotes: {
           clipOrder: sceneOrder(),
-          reason: `Fixed ${FINAL_SECONDS}s assemble: scene 1 → 2 → 3, ${CLIP_SECONDS}s each, silent Mini 480p.`,
+          reason: `Fixed ${FINAL_SECONDS}s assemble: scene 1 → 2 → 3, ${CLIP_SECONDS}s each, silent Seedance 1.5 Pro 480p.`,
         },
         finalVideoUrl: finalUpload.url,
         finalVideoKey: finalUpload.key,

@@ -17,7 +17,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Hook clip factory",
-  description: "Always 12 seconds: ElevenLabs GPT Image 2 stills, Seedance 2.0 Mini 480p clips (3 × 4s), silent assemble.",
+  description: "Always 12 seconds: ElevenLabs GPT Image 2 stills, Seedance 1.5 Pro 480p clips (3 × 4s), silent assemble.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

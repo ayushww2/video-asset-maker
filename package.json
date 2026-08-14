@@ -12,8 +12,10 @@
     "test": "tsx --test src/lib/jobs/planner.test.ts src/lib/jobs/pipeline.test.ts src/lib/ffmpeg.test.ts"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.52",
     "@aws-sdk/client-s3": "^3.1101.0",
     "@prisma/client": "^6.19.3",
+    "ai": "^7.0.65",
     "jose": "^6.1.3",
     "next": "16.2.12",
     "openai": "^7.3.0",

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { seedanceRequestBody, withI2vSuffix, I2V_SUFFIX } from "../seedance";
+import { seedanceRequest, withI2vSuffix, I2V_SUFFIX } from "../seedance";
 
 test("appends recovered-footage suffix once", () => {
   const once = withI2vSuffix("Slow ROV drift through murk.");
@@ -10,33 +10,25 @@ test("appends recovered-footage suffix once", () => {
   assert.equal(twice.split(I2V_SUFFIX).length, 2);
 });
 
-test("clip-only Seedance body uses Mini at 480p and omits end frame when none is given", () => {
-  const startFrame = {
-    type: "inline_base64" as const,
-    content_base64: "AAAA",
-    mime_type: "image/png" as const,
-  };
-  const startOnly = seedanceRequestBody({
+test("clip-only Seedance request uses 1.5 Pro at 480p silent and omits last frame when none is given", () => {
+  const startOnly = seedanceRequest({
     prompt: "Slow pan across the still.",
-    startFrame,
+    startImageUrl: "https://example.com/start.png",
   });
-  assert.equal(startOnly.model_id, "bytedance-seedance-v2-mini");
-  assert.equal(startOnly.start_frame.content_base64, "AAAA");
-  assert.equal("end_frame" in startOnly, false);
-  assert.equal(startOnly.duration_secs, 4);
-  assert.equal(startOnly.resolution, "480p");
-  assert.equal(startOnly.generate_audio, false);
-  assert.equal(startOnly.aspect_ratio, "16:9");
+  assert.equal(startOnly.model, "bytedance/seedance-v1.5-pro");
+  assert.equal(startOnly.duration, 4);
+  assert.equal(startOnly.resolution, "854x480");
+  assert.equal(startOnly.generateAudio, false);
+  assert.equal(startOnly.aspectRatio, "16:9");
+  assert.deepEqual(startOnly.frameImages, [{ image: "https://example.com/start.png", frameType: "first_frame" }]);
 
-  const both = seedanceRequestBody({
+  const both = seedanceRequest({
     prompt: "Cut on action.",
-    startFrame,
-    endFrame: {
-      type: "inline_base64",
-      content_base64: "BBBB",
-      mime_type: "image/jpeg",
-    },
+    startImageUrl: "https://example.com/start.png",
+    endImageUrl: "https://example.com/end.jpg",
   });
-  assert.equal(both.end_frame?.content_base64, "BBBB");
-  assert.equal(both.end_frame?.mime_type, "image/jpeg");
+  assert.deepEqual(both.frameImages, [
+    { image: "https://example.com/start.png", frameType: "first_frame" },
+    { image: "https://example.com/end.jpg", frameType: "last_frame" },
+  ]);
 });

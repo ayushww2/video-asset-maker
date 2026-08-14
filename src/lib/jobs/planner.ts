@@ -83,7 +83,7 @@ Return ONLY JSON with this shape:
     "clipOrder": [1, 2, 3],
     "soundDesign": string,
     "overlayText": string[],
-    "finalTiming": "12 seconds (3 × 4s silent Seedance Mini 480p clips)"
+    "finalTiming": "12 seconds (3 × 4s silent Seedance 1.5 Pro 480p clips)"
   }
 }
 

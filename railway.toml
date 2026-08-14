@@ -7,6 +7,6 @@ healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 
-# Seedance 2 Mini is blocked from US IPs. Run the worker in Singapore.
+# Worker stays in Singapore. Video now goes through Vercel AI Gateway, not ElevenLabs Mini.
 [deploy.multiRegionConfig."asia-southeast1-eqsg3a"]
 numReplicas = 1

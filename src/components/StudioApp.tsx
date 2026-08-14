@@ -58,7 +58,7 @@ export default function StudioApp() {
         <h1 className="mt-2 text-4xl font-semibold tracking-tight">Always 12 seconds</h1>
         <p className="mt-3 max-w-2xl text-[var(--muted)]">
           Backend always makes 3 scenes, 2 frames each, converts each pair to one 4s clip, then assembles a silent 12s
-          piece. GPT Image 2 stills via ElevenLabs → Seedance 2.0 Mini 480p clips → silent assemble.
+          piece. GPT Image 2 stills via ElevenLabs → Seedance 1.5 Pro 480p clips → silent assemble.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--muted)]">
           <span>
@@ -180,7 +180,7 @@ function ClipsSection({
         <div>
           <h2 className="text-2xl font-semibold">12s from existing stills</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Three scenes, start + end still each. Seedance 2.0 Mini (480p) makes three 4s clips, then one silent 12s assemble. No
+            Three scenes, start + end still each. Seedance 1.5 Pro (480p) makes three 4s clips, then one silent 12s assemble. No
             GPT Image.
           </p>
         </div>
@@ -302,7 +302,7 @@ function HooksSection({
         <div>
           <h2 className="text-2xl font-semibold">12s factory</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Title in. Backend always plans 3 scenes, ElevenLabs GPT Image 2 makes start + end for each, Seedance 2.0 Mini
+            Title in. Backend always plans 3 scenes, ElevenLabs GPT Image 2 makes start + end for each, Seedance 1.5 Pro
             (480p) turns each pair into a 4s clip, then silent assemble to 12s. No voiceover.
           </p>
         </div>
