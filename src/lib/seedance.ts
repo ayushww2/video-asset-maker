@@ -2,7 +2,10 @@ import { createGateway, experimental_generateVideo as generateVideo } from "ai";
 import { CLIP_SECONDS } from "@/lib/jobs/pipeline";
 
 export const SEEDANCE_MODEL_ID = "bytedance/seedance-v1.5-pro";
-export const SEEDANCE_RESOLUTION = "854x480" as const;
+// Seedance 1.5 Pro's first+last-frame ("flf2v") mode rejects 480p — only 720p/1080p are valid there,
+// even though 480p is priced and allowed for plain single-frame i2v. Generate at 720p and let the
+// ffmpeg assemble step (which already force-scales every clip to 854x480) bring it down to 480p.
+export const SEEDANCE_RESOLUTION = "1280x720" as const;
 
 export const I2V_SUFFIX =
   "Use the uploaded image as the exact reference frame. Preserve the same composition, objects, lighting, and documentary style. Do not redesign the scene. Animate only subtle believable movement. Keep the motion practical, restrained, and realistic, as if this is real recovered footage.";

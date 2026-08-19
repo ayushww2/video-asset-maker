@@ -17,7 +17,7 @@ test("clip-only Seedance request uses 1.5 Pro at 480p silent and omits last fram
   });
   assert.equal(startOnly.model, "bytedance/seedance-v1.5-pro");
   assert.equal(startOnly.duration, 4);
-  assert.equal(startOnly.resolution, "854x480");
+  assert.equal(startOnly.resolution, "1280x720");
   assert.equal(startOnly.generateAudio, false);
   assert.equal(startOnly.aspectRatio, "16:9");
   assert.deepEqual(startOnly.frameImages, [{ image: "https://example.com/start.png", frameType: "first_frame" }]);
