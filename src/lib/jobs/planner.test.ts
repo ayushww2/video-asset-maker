@@ -10,14 +10,14 @@ test("appends recovered-footage suffix once", () => {
   assert.equal(twice.split(I2V_SUFFIX).length, 2);
 });
 
-test("clip-only Seedance request uses 1.5 Pro at 480p silent and omits last frame when none is given", () => {
+test("Seedance request uses 1.5 Pro at true 480p silent and always animates from a single first frame", () => {
   const startOnly = seedanceRequest({
     prompt: "Slow pan across the still.",
     startImageUrl: "https://example.com/start.png",
   });
   assert.equal(startOnly.model, "bytedance/seedance-v1.5-pro");
   assert.equal(startOnly.duration, 4);
-  assert.equal(startOnly.resolution, "1280x720");
+  assert.equal(startOnly.resolution, "854x480");
   assert.equal(startOnly.generateAudio, false);
   assert.equal(startOnly.aspectRatio, "16:9");
   assert.deepEqual(startOnly.frameImages, [{ image: "https://example.com/start.png", frameType: "first_frame" }]);
@@ -27,8 +27,7 @@ test("clip-only Seedance request uses 1.5 Pro at 480p silent and omits last fram
     startImageUrl: "https://example.com/start.png",
     endImageUrl: "https://example.com/end.jpg",
   });
-  assert.deepEqual(both.frameImages, [
-    { image: "https://example.com/start.png", frameType: "first_frame" },
-    { image: "https://example.com/end.jpg", frameType: "last_frame" },
-  ]);
+  // Sending a last_frame flips the provider into flf2v mode, which rejects 480p, so the end still
+  // is intentionally never sent to the video model — only described in the prompt text.
+  assert.deepEqual(both.frameImages, [{ image: "https://example.com/start.png", frameType: "first_frame" }]);
 });
