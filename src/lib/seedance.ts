@@ -2,11 +2,12 @@ import { createGateway, experimental_generateVideo as generateVideo } from "ai";
 import { CLIP_SECONDS } from "@/lib/jobs/pipeline";
 
 export const SEEDANCE_MODEL_ID = "bytedance/seedance-v1.5-pro";
-// Seedance 1.5 Pro's first+last-frame ("flf2v") mode rejects 480p — only 720p/1080p are valid there.
-// True 480p pricing (~half the cost of 720p) is only available in plain single-frame i2v mode, so we
-// animate from the start still only and describe the end state through the text prompt instead of
-// submitting a last_frame image.
-export const SEEDANCE_RESOLUTION = "854x480" as const;
+// The AI SDK's `resolution` field is typed as `${width}x${height}` and is forwarded to the
+// gateway/provider verbatim (no translation). ByteDance's real Ark API for this model only accepts
+// the literal enum strings "480p" / "720p" / "1080p" — dimension strings like "854x480" are rejected
+// outright with "the parameter resolution ... is not valid". Cast the literal enum value through the
+// SDK's stricter type to get true 480p pricing (~half of 720p, per the gateway's own pricing table).
+export const SEEDANCE_RESOLUTION = "480p" as unknown as `${number}x${number}`;
 
 export const I2V_SUFFIX =
   "Use the uploaded image as the exact reference frame. Preserve the same composition, objects, lighting, and documentary style. Do not redesign the scene. Animate only subtle believable movement. Keep the motion practical, restrained, and realistic, as if this is real recovered footage.";

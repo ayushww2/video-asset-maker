@@ -17,7 +17,7 @@ test("Seedance request uses 1.5 Pro at true 480p silent and always animates from
   });
   assert.equal(startOnly.model, "bytedance/seedance-v1.5-pro");
   assert.equal(startOnly.duration, 4);
-  assert.equal(startOnly.resolution, "854x480");
+  assert.equal(startOnly.resolution, "480p");
   assert.equal(startOnly.generateAudio, false);
   assert.equal(startOnly.aspectRatio, "16:9");
   assert.deepEqual(startOnly.frameImages, [{ image: "https://example.com/start.png", frameType: "first_frame" }]);
