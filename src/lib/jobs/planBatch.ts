@@ -1,7 +1,9 @@
 import type OpenAI from "openai";
 import { createContactBoxClient, getPlannerModel } from "@/lib/contactbox";
 import { getPlannerBatchSize } from "@/lib/env";
+import { DEFAULT_GUIDANCE } from "@/lib/ui";
 import type { PlannedAsset, ReferenceImage } from "@/lib/jobs/types";
+import { plannerRealismRules } from "@/lib/images/realismPrompt";
 import {
   buildJobPlanFromParts,
   normalizeAsset,
@@ -59,9 +61,7 @@ function baseUserContext(input: {
   referenceNotes?: string | null;
   referenceImages?: ReferenceImage[];
 }): string {
-  const guidance =
-    input.guidance ||
-    "Photoreal real-camera photos in real-world light — slightly brighter natural exposure, believable contact shadows, subjects settled into the scene. Mild grain/noise OK; no CGI / 3D / plastic render look. Full-bleed subject (field photo, archive still, CCTV-look, underwater survey). NEVER TVs/monitors, evidence tables, corkboards, or dossiers. No readable text.";
+  const guidance = input.guidance || DEFAULT_GUIDANCE;
   return `Title: ${input.title}
 Niche: ${input.niche || "mystery"}
 Mood: ${input.mood || "investigative / suspenseful"}
@@ -118,7 +118,8 @@ Return ONLY valid JSON with diagnosis, styleMix, checklist, doNotShow, hookOrder
 Each asset MUST include:
 assetNumber (${start}..${end}), assetName, selected (true), priority, whereToUse (hook|setup|major reveal|payoff), bestStyle, editorMove, labelNeeded, suggestedLabel, scriptExcerpt, scriptPlacement, scriptWordStart, scriptWordEnd, whyItMatters, whatItShouldShow, shouldFeelLike, quickPrompt, detailedPrompt, negativePrompt.
 
-Rules: still images only; 16:9 photoreal real-camera; no readable text/TVs/corkboards; ban CGI look in negativePrompt.`
+Rules: still images only; 16:9 photoreal real-camera; no readable text/TVs/corkboards.
+${plannerRealismRules()}`
       : `You are continuing a Video Asset Maker plan. Return ONLY valid JSON: { "assets": [ exactly ${n} assets numbered ${start}..${end} ] } with the same per-asset fields as before. Do not repeat earlier assets.`;
 
     const user = `${baseUserContext({ ...input, assetCount: count })}

@@ -100,4 +100,4 @@ export const NICHES = [
 ];
 
 export const DEFAULT_GUIDANCE =
-  "Photoreal real-camera photos in real-world light — slightly brighter natural exposure, believable contact shadows, subjects settled into the scene. Mild grain/noise OK; no CGI / 3D / plastic render look. Full-bleed subject (field photo, archive still, CCTV-look, underwater survey). NEVER TVs/monitors, evidence tables, corkboards, or dossiers. No readable text.";
+  "Photoreal real-camera only — natural ambient light, slightly bright exposure, believable contact shadows, subtle grain/noise, imperfect focus OK. Full-bleed subject (field photo, archive still, trail-cam, ROV survey). No CGI/3D/plastic/waxy/HDR glow. NEVER TVs/monitors, evidence tables, corkboards, dossiers, or readable text.";

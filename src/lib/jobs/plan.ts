@@ -1,6 +1,8 @@
 import { createContactBoxClient, getPlannerModel } from "@/lib/contactbox";
 import { getPlannerBatchSize } from "@/lib/env";
+import { DEFAULT_GUIDANCE } from "@/lib/ui";
 import { planJobInBatches, shouldUseBatchedPlanning } from "@/lib/jobs/planBatch";
+import { plannerRealismRules } from "@/lib/images/realismPrompt";
 import {
   buildJobPlanFromParts,
   normalizeAsset,
@@ -28,9 +30,7 @@ export async function planJob(input: {
 
   const client = createContactBoxClient();
   const started = Date.now();
-  const guidance =
-    input.guidance ||
-    "Photoreal real-camera photos in real-world light — slightly brighter natural exposure, believable contact shadows, subjects settled into the scene. Mild grain/noise OK; no CGI / 3D / plastic render look. Full-bleed subject (field photo, archive still, CCTV-look, underwater survey). NEVER TVs/monitors, evidence tables, corkboards, or dossiers. No readable text.";
+  const guidance = input.guidance || DEFAULT_GUIDANCE;
 
   const system = `You are the planner for Video Asset Maker, a documentary stills studio for mystery YouTube films.
 Return ONLY valid JSON with this shape:
@@ -60,6 +60,7 @@ Rules:
 - Match uploaded reference *style* if any, but never repeat those scenes.
 - No readable text, logos, timestamps, fake documents, TVs/monitors, corkboards, evidence tables, dossiers.
 - Ban CGI / 3D / Unreal / Octane / plastic render look in every negativePrompt.
+${plannerRealismRules()}
 - Every detailedPrompt must specify photorealistic real-camera texture, slightly brighter natural exposure, and the meta-shot bans.
 - Historical / scientific recreations should be labeled (visual recreation / dramatized visual).
 - Keep claims visually conditional. Do not invent proof.`;
