@@ -69,7 +69,7 @@ async function generateViaElevenLabs(params: {
   const result = await createAndWaitForMedia({
     kind: "image",
     body,
-    timeoutMs: 180_000,
+    timeoutMs: 300_000,
   });
   const bytes = await downloadMedia(result.url);
   const mime = result.mimeType.startsWith("image/") ? result.mimeType : "image/png";

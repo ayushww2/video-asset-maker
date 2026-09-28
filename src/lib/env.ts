@@ -25,6 +25,12 @@ export function getReasoningTimeoutMs(): number {
   return Math.min(900_000, Math.round(n));
 }
 
+export function getPlannerBatchSize(): number {
+  const n = Number(process.env.PLANNER_BATCH_SIZE || 6);
+  if (!Number.isFinite(n) || n < 3) return 6;
+  return Math.min(12, Math.round(n));
+}
+
 export function getPlannerScriptMaxChars(): number {
   const n = Number(process.env.PLANNER_SCRIPT_MAX_CHARS || 14_000);
   if (!Number.isFinite(n) || n < 2000) return 14_000;

@@ -7,6 +7,13 @@ import {
 } from "@/lib/env";
 import { generateGptImage } from "@/lib/images/openaiImage";
 import { planJob } from "@/lib/jobs/plan";
+import {
+  autoRetryCountFromEstimate,
+  isRetryableJobError,
+  MAX_JOB_AUTO_RETRIES,
+  recoverStuckAndFailedJobs,
+  requeueJobForRetry,
+} from "@/lib/jobs/retry";
 import type { JobPlan, PlannedAsset, ReferenceImage } from "@/lib/jobs/types";
 import { getR2Config, uploadToR2 } from "@/lib/r2";
 
@@ -254,6 +261,12 @@ async function processOneJob(jobId: string) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Job failed";
+    const current = await prisma.job.findUnique({ where: { id: jobId } });
+    const retries = autoRetryCountFromEstimate(current?.estimate);
+    if (isRetryableJobError(message) && retries < MAX_JOB_AUTO_RETRIES) {
+      await requeueJobForRetry(jobId, retries + 1);
+      return;
+    }
     await prisma.job.update({
       where: { id: jobId },
       data: { status: "failed", error: message, completedAt: new Date(), updatedAt: new Date() },
@@ -265,6 +278,7 @@ export async function runJobWorkerLoop() {
   console.log("[jobs] worker loop started");
   while (true) {
     try {
+      await recoverStuckAndFailedJobs(8);
       const next = await prisma.job.findFirst({
         where: { status: { in: ["queued", "planning", "generating"] } },
         orderBy: { createdAt: "asc" },
