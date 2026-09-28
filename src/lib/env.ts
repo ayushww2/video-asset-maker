@@ -60,9 +60,25 @@ export function getImageConcurrency(): number {
   return Math.min(10, Math.round(n));
 }
 
+/** ElevenLabs credits per GPT Image 2 still (app default matches typical low 16:9 1K). */
+export function getImageCreditsPerImage(): number {
+  const n = Number(process.env.IMAGE_CREDITS_PER_IMAGE || 50);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 50;
+}
+
+/** USD value of one ElevenLabs credit when deriving image $ from credits. */
+export function getImageCreditUsd(): number {
+  const n = Number(process.env.IMAGE_CREDIT_USD || 0.001);
+  return Number.isFinite(n) && n >= 0 ? n : 0.001;
+}
+
 export function getImageCostUsd(): number {
-  const n = Number(process.env.IMAGE_COST_USD || 0.006);
-  return Number.isFinite(n) && n >= 0 ? n : 0.006;
+  const explicit = process.env.IMAGE_COST_USD?.trim();
+  if (explicit) {
+    const n = Number(explicit);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return getImageCreditsPerImage() * getImageCreditUsd();
 }
 
 export function getImageSecondsAvg(): number {

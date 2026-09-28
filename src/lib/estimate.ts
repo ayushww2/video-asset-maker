@@ -1,6 +1,7 @@
 import {
   getImageConcurrency,
   getImageCostUsd,
+  getImageCreditsPerImage,
   getImageSecondsAvg,
   getReasoningCostUsd,
   getReasoningSecondsAvg,
@@ -12,6 +13,8 @@ export type CostEstimate = {
   imageBatches: number;
   reasoningCostUsd: number;
   imageCostUsd: number;
+  imageCreditsPerImage: number;
+  imageCreditsTotal: number;
   totalCostUsd: number;
   reasoningSeconds: number;
   imageSeconds: number;
@@ -32,9 +35,12 @@ export function estimateJob(input: {
   const imageConcurrency = getImageConcurrency();
   const imageBatches = Math.ceil(assetCount / imageConcurrency);
   const reasoningCostUsd = roundMoney(getReasoningCostUsd());
+  const creditsEach = getImageCreditsPerImage();
   const imageUnit = getImageCostUsd();
   const imageCostUsd = roundMoney(assetCount * imageUnit);
+  const imageCreditsTotal = assetCount * creditsEach;
   const totalCostUsd = roundMoney(reasoningCostUsd + imageCostUsd);
+  const imageCostLine = `${assetCount} images × ${creditsEach} credits = ${imageCreditsTotal} credits (~$${imageCostUsd})`;
   const reasoningSeconds = getReasoningSecondsAvg();
   const imageSeconds = imageBatches * getImageSecondsAvg();
   const totalSeconds = reasoningSeconds + imageSeconds;
@@ -47,11 +53,13 @@ export function estimateJob(input: {
     imageBatches,
     reasoningCostUsd,
     imageCostUsd,
+    imageCreditsPerImage: creditsEach,
+    imageCreditsTotal,
     totalCostUsd,
     reasoningSeconds,
     imageSeconds,
     totalSeconds,
     totalMinutes,
-    breakdown: `Reasoning ~$${reasoningCostUsd} (~${reasoningSeconds}s) + ${assetCount} images × $${imageUnit} = $${imageCostUsd} (~${imageSeconds}s at ${imageConcurrency} concurrent) → ~$${totalCostUsd} / ~${minutesLabel} min`,
+    breakdown: `Reasoning ~$${reasoningCostUsd} (~${reasoningSeconds}s) + ${imageCostLine} (~${imageSeconds}s at ${imageConcurrency} concurrent) → ~$${totalCostUsd} / ~${minutesLabel} min`,
   };
 }

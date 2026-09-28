@@ -1,4 +1,9 @@
-import { isAuthEnabled, useElevenLabsImage } from "@/lib/env";
+import {
+  getImageCreditsPerImage,
+  getImageCostUsd,
+  isAuthEnabled,
+  useElevenLabsImage,
+} from "@/lib/env";
 
 export async function GET() {
   return Response.json({
@@ -9,5 +14,7 @@ export async function GET() {
     imageModel: "gpt-image-2",
     imageQuality: process.env.IMAGE_QUALITY || "low",
     imageAspect: "16:9",
+    imageCreditsPerImage: useElevenLabsImage() ? getImageCreditsPerImage() : null,
+    imageCostUsdEstimate: getImageCostUsd(),
   });
 }
