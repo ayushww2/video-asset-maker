@@ -16,4 +16,4 @@ RUN npx prisma generate && npm run build
 ENV PORT=3000
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npm start"]
+CMD ["sh", "-c", "if [ \"${PRISMA_DB_PUSH_ACCEPT_DATA_LOSS:-}\" = \"1\" ]; then npx prisma db push --skip-generate --accept-data-loss; else npx prisma db push --skip-generate; fi && npm start"]
