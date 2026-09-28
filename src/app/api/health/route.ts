@@ -1,23 +1,13 @@
-import { elevenLabsApiKey, isAuthEnabled } from "@/lib/env";
+import { isAuthEnabled, useElevenLabsImage } from "@/lib/env";
 
 export async function GET() {
-  let country: string | null = null;
-  try {
-    const res = await fetch("https://ipinfo.io/json", { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const data = (await res.json()) as { country?: string };
-      country = data.country || null;
-    }
-  } catch {
-    country = null;
-  }
   return Response.json({
     ok: true,
+    product: "video-asset-maker",
     authRequired: isAuthEnabled(),
-    elevenLabsConfigured: Boolean(elevenLabsApiKey()),
+    imageProvider: useElevenLabsImage() ? "elevenlabs" : "openai-compatible",
     imageModel: "gpt-image-2",
     imageQuality: process.env.IMAGE_QUALITY || "low",
-    railwayRegion: process.env.RAILWAY_REPLICA_REGION || process.env.RAILWAY_REGION || null,
-    egressCountry: country,
+    imageAspect: "16:9",
   });
 }

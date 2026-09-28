@@ -1,523 +1,638 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import CopyShareLink from "@/components/CopyShareLink";
+import {
+  DEFAULT_GUIDANCE,
+  NICHES,
+  assetSrc,
+  formatSeconds,
+  formatUsd,
+  statusClass,
+  type AssetRecord,
+  type JobRecord,
+} from "@/lib/ui";
 
-type Mode = "hooks" | "clips";
+type Tab = "new" | "history";
+type ReferenceImage = { name: string; mimeType: string; dataUrl: string };
+type Estimate = NonNullable<JobRecord["estimate"]>;
+type SessionUser = { username: string; displayName: string };
 
-type Scene = {
-  id: string;
-  sceneNumber: number;
-  purpose: string | null;
-  whatViewerSees: string | null;
-  curiosity: string | null;
-  startImageUrl: string | null;
-  endImageUrl: string | null;
-  clipUrl: string | null;
-  i2vPrompt: string | null;
-  status: string;
-};
+async function fileToRef(file: File): Promise<ReferenceImage> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Failed to read image"));
+    reader.readAsDataURL(file);
+  });
+  return { name: file.name, mimeType: file.type || "image/png", dataUrl };
+}
 
-type Job = {
-  id: string;
-  title: string;
-  kind?: string;
-  script: string | null;
-  status: string;
-  sceneCount: number;
-  plan: {
-    whyThisStructure?: string;
-    evidenceStyle?: string;
-    voiceover?: { language?: string; languageWhy?: string; lines?: string[] };
-    editNotes?: { clipOrder?: number[]; soundDesign?: string; overlayText?: string[]; finalTiming?: string };
-  } | null;
-  voiceoverText: string | null;
-  voiceoverLanguage: string | null;
-  voiceoverUrl: string | null;
-  assembleNotes: { clipOrder?: number[]; reason?: string; soundDesign?: string; overlayText?: string[] } | null;
-  finalVideoUrl: string | null;
-  error: string | null;
-  progressDone: number;
-  progressTotal: number;
-  createdAt: string;
-  scenes: Scene[];
-};
+function todayUtc(): string {
+  const e = new Date();
+  return `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`;
+}
 
-type Capacity = { ok: boolean; used: number; cap: number };
+function downloadAsset(asset: AssetRecord) {
+  const src = assetSrc(asset);
+  if (!src) return;
+  const a = document.createElement("a");
+  a.href = src;
+  a.target = "_blank";
+  a.rel = "noreferrer";
+  const name = asset.payload?.assetName || `asset-${asset.assetNumber}`;
+  a.download = `${String(asset.assetNumber).padStart(2, "0")}-${name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 48)}.png`;
+  a.click();
+}
 
 export default function StudioApp() {
-  const [mode, setMode] = useState<Mode>("hooks");
-  const [capacity, setCapacity] = useState<Capacity | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8">
-      <header className="border-b border-[var(--line)] pb-6">
-        <p className="font-[family-name:var(--font-ibm-plex-mono)] text-[0.7rem] uppercase tracking-[0.18em] text-[var(--accent)]">
-          12-second clip factory
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Always 12 seconds</h1>
-        <p className="mt-3 max-w-2xl text-[var(--muted)]">
-          Backend always makes 3 scenes, 2 frames each, converts each pair to one 4s clip, then assembles a silent 12s
-          piece. GPT Image 2 stills via ElevenLabs → Seedance 1.5 Pro 480p clips → silent assemble.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--muted)]">
-          <span>
-            Today {capacity?.used ?? "—"}/{capacity?.cap ?? 30}
-          </span>
-          <button className="btn btn-ghost" type="button" onClick={() => void fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
-            Log out
-          </button>
-        </div>
-        <div className="mt-6 flex gap-2">
-          <button className={mode === "hooks" ? "btn" : "btn btn-ghost"} type="button" onClick={() => { setMode("hooks"); setError(null); }}>
-            12s factory
-          </button>
-          <button className={mode === "clips" ? "btn" : "btn btn-ghost"} type="button" onClick={() => { setMode("clips"); setError(null); }}>
-            Stills in
-          </button>
-        </div>
-      </header>
-
-      {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
-
-      {mode === "clips" ? (
-        <ClipsSection onCapacity={setCapacity} onError={setError} />
-      ) : (
-        <HooksSection onCapacity={setCapacity} onError={setError} />
-      )}
-    </div>
-  );
-}
-
-type ClipSceneDraft = {
-  prompt: string;
-  startFile: File | null;
-  endFile: File | null;
-  startUrl: string;
-  endUrl: string;
-};
-
-function emptyClipScenes(): ClipSceneDraft[] {
-  return [1, 2, 3].map(() => ({ prompt: "", startFile: null, endFile: null, startUrl: "", endUrl: "" }));
-}
-
-function ClipsSection({
-  onCapacity,
-  onError,
-}: {
-  onCapacity: (c: Capacity) => void;
-  onError: (e: string | null) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [scenes, setScenes] = useState<ClipSceneDraft[]>(emptyClipScenes);
-  const [job, setJob] = useState<Job | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [busy, setBusy] = useState(false);
-  const progress = useMemo(() => {
-    if (!job?.progressTotal) return 0;
-    return Math.round((job.progressDone / job.progressTotal) * 100);
-  }, [job]);
-
-  function patchScene(index: number, patch: Partial<ClipSceneDraft>) {
-    setScenes((prev) => prev.map((scene, i) => (i === index ? { ...scene, ...patch } : scene)));
-  }
-
-  async function refreshList() {
-    const res = await fetch("/api/jobs?kind=clip");
-    const data = await res.json();
-    if (res.ok) {
-      setJobs(data.jobs || []);
-      if (data.capacity) onCapacity(data.capacity);
-    }
-  }
-
-  async function submit() {
-    onError(null);
-    setBusy(true);
-    try {
-      const form = new FormData();
-      form.set("title", title.trim() || "12s clip");
-      scenes.forEach((scene, i) => {
-        const n = i + 1;
-        form.set(`prompt${n}`, scene.prompt.trim());
-        if (scene.startFile) form.set(`start${n}`, scene.startFile);
-        if (scene.endFile) form.set(`end${n}`, scene.endFile);
-        if (scene.startUrl.trim()) form.set(`startUrl${n}`, scene.startUrl.trim());
-        if (scene.endUrl.trim()) form.set(`endUrl${n}`, scene.endUrl.trim());
-      });
-      const res = await fetch("/api/clips", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Clip submit failed");
-      setJob(data.job);
-      if (data.capacity) onCapacity(data.capacity);
-      void refreshList();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Clip submit failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      void refreshList();
-    }, 0);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
-  }, []);
-
-  useJobPoll(job, setJob, refreshList);
-
-  const canSubmit = scenes.every((scene) => {
-    const start = scene.startFile || scene.startUrl.trim();
-    const end = scene.endFile || scene.endUrl.trim();
-    return Boolean(scene.prompt.trim() && start && end && !busy);
-  });
-
-  return (
-    <>
-      <section className="panel space-y-4 p-5">
-        <div>
-          <h2 className="text-2xl font-semibold">12s from existing stills</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Three scenes, start + end still each. Seedance 1.5 Pro (480p) makes three 4s clips, then one silent 12s assemble. No
-            GPT Image.
-          </p>
-        </div>
-        <div>
-          <label className="label" htmlFor="clip-title">
-            Label (optional)
-          </label>
-          <input id="clip-title" className="field" placeholder="Nile ROV hook" value={title} onChange={(e) => setTitle(e.target.value)} />
-        </div>
-        {scenes.map((scene, index) => (
-          <article key={index} className="space-y-3 border-t border-[var(--line)] pt-4">
-            <h3 className="text-lg font-medium">Scene {index + 1}</h3>
-            <div className="grid gap-4 md:grid-cols-2">
-              <StillPicker
-                id={`start-${index + 1}`}
-                label="Start still"
-                file={scene.startFile}
-                url={scene.startUrl}
-                preview={scene.startFile ? URL.createObjectURL(scene.startFile) : scene.startUrl || null}
-                onFile={(file) => patchScene(index, { startFile: file })}
-                onUrl={(url) => patchScene(index, { startUrl: url })}
-              />
-              <StillPicker
-                id={`end-${index + 1}`}
-                label="End still"
-                file={scene.endFile}
-                url={scene.endUrl}
-                preview={scene.endFile ? URL.createObjectURL(scene.endFile) : scene.endUrl || null}
-                onFile={(file) => patchScene(index, { endFile: file })}
-                onUrl={(url) => patchScene(index, { endUrl: url })}
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor={`clip-prompt-${index + 1}`}>
-                Motion prompt
-              </label>
-              <textarea
-                id={`clip-prompt-${index + 1}`}
-                className="field min-h-24 resize-y"
-                placeholder="Slow handheld drift toward the end frame…"
-                value={scene.prompt}
-                onChange={(e) => patchScene(index, { prompt: e.target.value })}
-              />
-            </div>
-          </article>
-        ))}
-        <button className="btn" type="button" disabled={!canSubmit} onClick={() => void submit()}>
-          {busy ? "Queueing…" : "Make 12s clip"}
-        </button>
-      </section>
-
-      {job ? <JobResult job={job} progress={progress} /> : null}
-      {job?.scenes?.length ? <SceneGrid scenes={job.scenes} /> : null}
-
-      {jobs.length > 0 ? <RecentJobs jobs={jobs} onSelect={setJob} /> : null}
-    </>
-  );
-}
-
-function HooksSection({
-  onCapacity,
-  onError,
-}: {
-  onCapacity: (c: Capacity) => void;
-  onError: (e: string | null) => void;
-}) {
+  const searchParams = useSearchParams();
+  const jobFromUrl = searchParams.get("job");
+  const [tab, setTab] = useState<Tab>("new");
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [title, setTitle] = useState("");
   const [script, setScript] = useState("");
-  const [job, setJob] = useState<Job | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [busy, setBusy] = useState(false);
-  const progress = useMemo(() => {
-    if (!job?.progressTotal) return 0;
-    return Math.round((job.progressDone / job.progressTotal) * 100);
-  }, [job]);
+  const [guidance, setGuidance] = useState(DEFAULT_GUIDANCE);
+  const [niche, setNiche] = useState("mystery");
+  const [mood, setMood] = useState("investigative / suspenseful");
+  const [realFootage, setRealFootage] = useState("LOW");
+  const [assetCount, setAssetCount] = useState(22);
+  const [references, setReferences] = useState<ReferenceImage[]>([]);
+  const [referenceNotes, setReferenceNotes] = useState("");
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(jobFromUrl);
+  const [job, setJob] = useState<JobRecord | null>(null);
+  const [assets, setAssets] = useState<AssetRecord[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [historyDate, setHistoryDate] = useState(todayUtc);
+  const [historyDates, setHistoryDates] = useState<string[]>([]);
+  const [historyJobs, setHistoryJobs] = useState<JobRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
-  async function refreshList() {
-    const res = await fetch("/api/jobs?kind=hook");
-    const data = await res.json();
-    if (res.ok) {
-      setJobs(data.jobs || []);
-      if (data.capacity) onCapacity(data.capacity);
-    }
+  const progress = useMemo(
+    () => (job?.progressTotal ? Math.round((job.progressDone / job.progressTotal) * 100) : 0),
+    [job],
+  );
+
+  async function addFiles(files: FileList | File[] | null) {
+    if (!files?.length) return;
+    const next = await Promise.all([...files].map(fileToRef));
+    setReferences((current) => [...current, ...next].slice(0, 8));
   }
 
-  async function submit() {
-    onError(null);
-    setBusy(true);
+  async function onPaste(event: React.ClipboardEvent) {
+    const items = [...event.clipboardData.items].filter((item) => item.type.startsWith("image/"));
+    if (!items.length) return;
+    event.preventDefault();
+    const files = items.map((item) => item.getAsFile()).filter((file): file is File => !!file);
+    const next = await Promise.all(files.map(fileToRef));
+    setReferences((current) => [...current, ...next].slice(0, 8));
+  }
+
+  async function submitJob() {
+    setError(null);
+    setSubmitting(true);
     try {
       const res = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, script }),
+        body: JSON.stringify({
+          title,
+          script,
+          guidance,
+          niche,
+          mood,
+          realFootage,
+          assetCount,
+          referenceNotes,
+          referenceImages: references,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submit failed");
+      setEstimate(data.estimate);
       setJob(data.job);
-      if (data.capacity) onCapacity(data.capacity);
+      setActiveJobId(data.job.id);
+      setAssets([]);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Submit failed");
+      setError(err instanceof Error ? err.message : "Submit failed");
     } finally {
-      setBusy(false);
+      setSubmitting(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
+
+  async function openJob(id: string) {
+    setError(null);
+    setTab("new");
+    setActiveJobId(id);
+    const res = await fetch(`/api/jobs/${id}?images=1`);
+    const data = await res.json();
+    if (res.ok) {
+      setJob(data.job);
+      setAssets(data.assets || []);
+      setTitle(data.job.title || "");
+    } else {
+      setError(data.error || "Failed to open job");
     }
   }
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void refreshList();
-    }, 0);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/estimate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assetCount, referenceCount: references.length }),
+        });
+        const data = await res.json();
+        if (!cancelled && res.ok) setEstimate(data.estimate);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assetCount, references.length]);
 
-  useJobPoll(job, setJob, refreshList);
-
-  return (
-    <>
-      <section className="panel space-y-4 p-5">
-        <div>
-          <h2 className="text-2xl font-semibold">12s factory</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Title in. Backend always plans 3 scenes, ElevenLabs GPT Image 2 makes start + end for each, Seedance 1.5 Pro
-            (480p) turns each pair into a 4s clip, then silent assemble to 12s. No voiceover.
-          </p>
-        </div>
-        <div>
-          <label className="label" htmlFor="title">
-            Title
-          </label>
-          <input
-            id="title"
-            className="field"
-            placeholder="They Found Something Under the Nile That Shouldn't Exist"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="script">
-            Script / topic (optional)
-          </label>
-          <textarea
-            id="script"
-            className="field min-h-32 resize-y"
-            placeholder="Paste hook script or topic notes…"
-            value={script}
-            onChange={(e) => setScript(e.target.value)}
-          />
-        </div>
-        <button className="btn" type="button" disabled={!title.trim() || busy} onClick={() => void submit()}>
-          {busy ? "Queueing…" : "Generate 12s clip"}
-        </button>
-      </section>
-
-      {job ? <JobResult job={job} progress={progress} /> : null}
-
-      {job?.scenes?.length ? <SceneGrid scenes={job.scenes} /> : null}
-
-      {jobs.length > 0 ? <RecentJobs jobs={jobs} onSelect={setJob} /> : null}
-    </>
-  );
-}
-
-function StillPicker({
-  id,
-  label,
-  file,
-  url,
-  preview,
-  onFile,
-  onUrl,
-}: {
-  id: string;
-  label: string;
-  file: File | null;
-  url: string;
-  preview: string | null;
-  onFile: (file: File | null) => void;
-  onUrl: (url: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <p className="label">{label}</p>
-      {preview ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={preview} alt={label} className="aspect-video w-full object-cover" />
-      ) : (
-        <div className="aspect-video border border-dashed border-[var(--line)] bg-black/40" />
-      )}
-      <input
-        id={`${id}-file`}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        className="block w-full text-sm text-[var(--muted)]"
-        onChange={(e) => onFile(e.target.files?.[0] || null)}
-      />
-      <input
-        id={`${id}-url`}
-        className="field"
-        placeholder="or paste a still URL"
-        value={file ? "" : url}
-        disabled={Boolean(file)}
-        onChange={(e) => onUrl(e.target.value)}
-      />
-    </div>
-  );
-}
-
-function JobResult({ job, progress }: { job: Job; progress: number }) {
-  return (
-    <section className="panel space-y-4 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold">{job.title}</h2>
-          <p className="mt-1 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--accent)]">
-            {job.status} · 3 scenes · 12s
-          </p>
-        </div>
-        {job.finalVideoUrl ? (
-          <a className="btn" href={job.finalVideoUrl} target="_blank" rel="noreferrer">
-            Download 12s
-          </a>
-        ) : null}
-      </div>
-      <div className="h-2 overflow-hidden bg-[#10130e]">
-        <div className="h-full bg-[var(--accent)]" style={{ width: `${progress}%` }} />
-      </div>
-      {job.error ? <p className="text-sm text-[var(--danger)]">{job.error}</p> : null}
-      {job.plan ? (
-        <div className="grid gap-3 text-sm md:grid-cols-2">
-          <p>
-            <span className="label">Evidence style</span>
-            {job.plan.evidenceStyle}
-          </p>
-          <p>
-            <span className="label">Why this structure</span>
-            {job.plan.whyThisStructure}
-          </p>
-        </div>
-      ) : null}
-      {job.scenes[0]?.i2vPrompt ? (
-        <p className="text-sm text-[var(--muted)]">{job.scenes[0].i2vPrompt}</p>
-      ) : null}
-      {job.finalVideoUrl || job.scenes[0]?.clipUrl ? (
-        <video className="w-full border border-[var(--line)]" controls src={job.finalVideoUrl || job.scenes[0]?.clipUrl || undefined} />
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {job.scenes[0]?.startImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={job.scenes[0].startImageUrl} alt="Start still" className="aspect-video w-full object-cover" />
-          ) : null}
-          {job.scenes[0]?.endImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={job.scenes[0].endImageUrl} alt="End still" className="aspect-video w-full object-cover" />
-          ) : null}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function SceneGrid({ scenes }: { scenes: Scene[] }) {
-  return (
-    <section className="space-y-4">
-      <h2 className="text-2xl font-semibold">Scenes</h2>
-      {scenes.map((scene) => (
-        <article key={scene.id || scene.sceneNumber} className="panel space-y-3 p-4">
-          <h3 className="text-lg font-medium">
-            Scene {scene.sceneNumber} · {scene.purpose}
-          </h3>
-          <p className="text-sm text-[var(--muted)]">{scene.whatViewerSees}</p>
-          <p className="text-sm">{scene.curiosity}</p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <p className="label">Start frame</p>
-              {scene.startImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={scene.startImageUrl} alt={`Scene ${scene.sceneNumber} start`} className="aspect-video w-full object-cover" />
-              ) : (
-                <div className="aspect-video bg-black/40" />
-              )}
-            </div>
-            <div>
-              <p className="label">End frame</p>
-              {scene.endImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={scene.endImageUrl} alt={`Scene ${scene.sceneNumber} end`} className="aspect-video w-full object-cover" />
-              ) : (
-                <div className="aspect-video bg-black/40" />
-              )}
-            </div>
-          </div>
-          {scene.clipUrl ? <video className="w-full" controls src={scene.clipUrl} /> : null}
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function RecentJobs({ jobs, onSelect }: { jobs: Job[]; onSelect: (job: Job) => void }) {
-  return (
-    <section className="space-y-3">
-      <h2 className="text-2xl font-semibold">Recent</h2>
-      {jobs.map((item) => (
-        <button key={item.id} type="button" className="panel flex w-full items-center justify-between p-4 text-left" onClick={() => onSelect(item)}>
-          <span>{item.title}</span>
-          <span className="font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--muted)]">
-            {item.status}
-          </span>
-        </button>
-      ))}
-    </section>
-  );
-}
-
-function useJobPoll(job: Job | null, setJob: (job: Job) => void, refreshList: () => void) {
   useEffect(() => {
-    if (!job || ["completed", "failed"].includes(job.status)) return;
-    const jobId = job.id;
+    if (!activeJobId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
-      const res = await fetch(`/api/jobs/${jobId}`);
-      const data = await res.json();
-      if (cancelled || !res.ok) return;
-      setJob(data.job);
-      if (["completed", "failed"].includes(data.job.status)) {
-        void refreshList();
-        return;
+      try {
+        const res = await fetch(`/api/jobs/${activeJobId}?images=1`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) throw new Error(data.error || "Poll failed");
+        setJob(data.job);
+        setAssets(data.assets || []);
+        setTitle(data.job.title || "");
+        if (data.job.status === "completed" || data.job.status === "failed") return;
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Poll failed");
       }
-      timer = setTimeout(poll, 3000);
+      if (!cancelled) timer = setTimeout(poll, 2500);
     }
-    timer = setTimeout(poll, 2000);
+    void poll();
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- poll on job id/status only
-  }, [job?.id, job?.status]);
+  }, [activeJobId]);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(async (res) => {
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.user) setUser(data.user);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "history") return;
+    let cancelled = false;
+    (async () => {
+      setHistoryLoading(true);
+      try {
+        const [datesRes, dateRes, recentRes] = await Promise.all([
+          fetch("/api/jobs?dates=1"),
+          fetch(`/api/jobs?date=${historyDate}`),
+          fetch("/api/jobs?recent=1"),
+        ]);
+        const datesData = await datesRes.json();
+        const dateData = await dateRes.json();
+        const recentData = await recentRes.json();
+        if (cancelled) return;
+        if (datesRes.ok) setHistoryDates(datesData.dates || []);
+        if (!dateRes.ok) throw new Error(dateData.error || "Failed to load jobs");
+        const listed = dateData.jobs || [];
+        const recent = recentData.jobs || [];
+        setHistoryJobs(listed.length ? listed : recent);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "History failed");
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, historyDate]);
+
+  return (
+    <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+      <header className="border-b border-[var(--line)] pb-6">
+        <p className="font-[family-name:var(--font-ibm-plex-mono)] text-[0.7rem] uppercase tracking-[0.18em] text-[var(--accent)]">
+          Documentary pipeline
+        </p>
+        <h1 className="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Video Asset Maker</h1>
+        <p className="mt-3 max-w-2xl text-[var(--muted)]">
+          Submit a title/script job. Backend plans assets, then generates up to 10 images at a time.
+          Estimates cover reasoning + image cost/time.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <button type="button" className={`btn ${tab === "new" ? "" : "btn-ghost"}`} onClick={() => setTab("new")}>
+            New job
+          </button>
+          <button
+            type="button"
+            className={`btn ${tab === "history" ? "" : "btn-ghost"}`}
+            onClick={() => setTab("history")}
+          >
+            Past jobs
+          </button>
+          <div className="ml-auto flex items-center gap-3">
+            {user ? (
+              <span className="font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--muted)]">
+                {user.displayName}
+              </span>
+            ) : null}
+            <button type="button" className="btn btn-ghost" onClick={() => void logout()}>
+              Log out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {error ? (
+        <p className="border border-[var(--danger)] bg-[#2a1818] px-3 py-2 text-sm text-[#f0c0c0]">{error}</p>
+      ) : null}
+
+      {tab === "history" ? (
+        <section className="panel space-y-4 p-5">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="label" htmlFor="historyDate">
+                View by date
+              </label>
+              <input
+                id="historyDate"
+                type="date"
+                className="field"
+                value={historyDate}
+                onChange={(e) => setHistoryDate(e.target.value)}
+              />
+            </div>
+            {historyDates.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {historyDates.slice(0, 8).map((day) => (
+                  <button
+                    key={day}
+                    type="button"
+                    className={`btn btn-ghost ${day === historyDate ? "!border-[var(--accent)]" : ""}`}
+                    onClick={() => setHistoryDate(day)}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {historyLoading ? (
+            <p className="text-[var(--muted)]">Loading jobs…</p>
+          ) : historyJobs.length === 0 ? (
+            <p className="text-[var(--muted)]">No jobs on this date.</p>
+          ) : (
+            <div className="space-y-3">
+              {historyJobs.map((item) => (
+                <div key={item.id} className="panel flex w-full flex-col gap-3 p-4">
+                  <button
+                    type="button"
+                    className="flex w-full flex-col gap-2 text-left hover:opacity-90"
+                    onClick={() => void openJob(item.id)}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-lg font-medium">{item.title}</h3>
+                      <span
+                        className={`font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider ${statusClass(item.status)}`}
+                      >
+                        {item.status}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-4 font-[family-name:var(--font-ibm-plex-mono)] text-xs text-[var(--muted)]">
+                      <span>
+                        {new Date(item.createdAt).toLocaleString()} · {item.progressDone}/{item.progressTotal} images
+                      </span>
+                      <span>image gen {formatUsd(item.actualImageCostUsd)}</span>
+                      <span>total {formatUsd(item.actualTotalCostUsd)}</span>
+                    </div>
+                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <CopyShareLink path={`/jobs/${item.id}`} />
+                    <Link href={`/jobs/${item.id}`} className="btn btn-ghost">
+                      Open share page
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <>
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <section className="panel space-y-4 p-5">
+              <div>
+                <label className="label" htmlFor="title">
+                  Title
+                </label>
+                <input
+                  id="title"
+                  className="field"
+                  placeholder="e.g. They Found Something Under the Nile That Shouldn't Exist"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="script">
+                  Script (optional)
+                </label>
+                <textarea
+                  id="script"
+                  className="field min-h-40 resize-y"
+                  placeholder="Paste hook / first 60–90 seconds or full script…"
+                  value={script}
+                  onChange={(e) => setScript(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="label" htmlFor="niche">
+                    Niche
+                  </label>
+                  <select id="niche" className="field" value={niche} onChange={(e) => setNiche(e.target.value)}>
+                    {NICHES.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="mood">
+                    Mood
+                  </label>
+                  <input id="mood" className="field" value={mood} onChange={(e) => setMood(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label" htmlFor="footage">
+                    Real footage
+                  </label>
+                  <select
+                    id="footage"
+                    className="field"
+                    value={realFootage}
+                    onChange={(e) => setRealFootage(e.target.value)}
+                  >
+                    <option value="LOW">LOW</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HIGH">HIGH</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label" htmlFor="count">
+                  Asset count (1–25)
+                </label>
+                <input
+                  id="count"
+                  type="number"
+                  min={1}
+                  max={25}
+                  className="field"
+                  value={assetCount}
+                  onChange={(e) => setAssetCount(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="guidance">
+                  Guidance
+                </label>
+                <textarea
+                  id="guidance"
+                  className="field min-h-28 resize-y"
+                  value={guidance}
+                  onChange={(e) => setGuidance(e.target.value)}
+                  onPaste={onPaste}
+                />
+              </div>
+            </section>
+
+            <section className="panel space-y-4 p-5">
+              <div>
+                <label className="label">Reference images — paste or upload (max 8)</label>
+                <div
+                  className="field flex min-h-28 flex-col items-center justify-center border-dashed text-center text-[var(--muted)]"
+                  onPaste={onPaste}
+                >
+                  <p className="mb-3 text-sm">Ctrl+V images here. Style dialogue is matched, scenes are not repeated.</p>
+                  <input type="file" accept="image/*" multiple onChange={(e) => addFiles(e.target.files)} />
+                </div>
+              </div>
+              {references.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {references.map((ref, index) => (
+                    <button
+                      key={`${ref.name}-${index}`}
+                      type="button"
+                      className="group relative overflow-hidden border border-[var(--line)]"
+                      onClick={() => setReferences((current) => current.filter((_, i) => i !== index))}
+                      title="Remove"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={ref.dataUrl} alt={ref.name} className="aspect-video w-full object-cover opacity-90" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div>
+                <label className="label" htmlFor="refnotes">
+                  Reference notes
+                </label>
+                <textarea
+                  id="refnotes"
+                  className="field min-h-20 resize-y"
+                  value={referenceNotes}
+                  onChange={(e) => setReferenceNotes(e.target.value)}
+                />
+              </div>
+              {estimate ? (
+                <div className="border border-[var(--line)] bg-[#10130e] p-4">
+                  <p className="label">Pre-submit estimate</p>
+                  <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-[var(--muted)]">Reasoning</p>
+                      <p>
+                        {formatUsd(estimate.reasoningCostUsd)} · {formatSeconds(estimate.reasoningSeconds)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">
+                        Images ({estimate.assetCount} @ {estimate.imageConcurrency} concurrent)
+                      </p>
+                      <p>
+                        {formatUsd(estimate.imageCostUsd)} · {formatSeconds(estimate.imageSeconds)}
+                      </p>
+                    </div>
+                    <div className="col-span-2 border-t border-[var(--line)] pt-3">
+                      <p className="text-[var(--muted)]">Total</p>
+                      <p className="text-lg text-[var(--accent)]">
+                        {formatUsd(estimate.totalCostUsd)} · ~{formatSeconds(estimate.totalSeconds)}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">{estimate.breakdown}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="btn w-full"
+                disabled={!title.trim() || submitting}
+                onClick={() => void submitJob()}
+              >
+                {submitting
+                  ? "Submitting…"
+                  : `Submit job${estimate ? ` · ~${formatUsd(estimate.totalCostUsd)} / ${formatSeconds(estimate.totalSeconds)}` : ""}`}
+              </button>
+            </section>
+          </div>
+
+          {job ? (
+            <section className="panel space-y-4 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-semibold">{job.title}</h2>
+                  <p
+                    className={`mt-1 font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider ${statusClass(job.status)}`}
+                  >
+                    {job.status}
+                    {job.status === "generating" || job.status === "planning" ? " · backend worker active" : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <CopyShareLink path={`/jobs/${job.id}`} />
+                  <Link href={`/jobs/${job.id}`} className="btn btn-ghost">
+                    Share page
+                  </Link>
+                </div>
+              </div>
+              <div className="h-2 overflow-hidden bg-[#10130e]">
+                <div className="h-full bg-[var(--accent)] transition-all duration-500" style={{ width: `${progress}%` }} />
+              </div>
+              <p className="font-[family-name:var(--font-ibm-plex-mono)] text-xs text-[var(--muted)]">
+                Progress {job.progressDone}/{job.progressTotal} · {progress}%
+              </p>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="border border-[var(--line)] p-3 text-sm">
+                  <p className="label">Estimate</p>
+                  <p>
+                    {formatUsd(job.estimate?.totalCostUsd)} · {formatSeconds(job.estimate?.totalSeconds)}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    reasoning {formatUsd(job.estimate?.reasoningCostUsd)} + images {formatUsd(job.estimate?.imageCostUsd)}
+                  </p>
+                </div>
+                <div className="border border-[var(--line)] p-3 text-sm">
+                  <p className="label">Actual so far</p>
+                  <p>
+                    {formatUsd(job.actualTotalCostUsd)} ·{" "}
+                    {job.actualReasoningMs != null
+                      ? formatSeconds(((job.actualReasoningMs || 0) + (job.actualImageMs || 0)) / 1000)
+                      : "—"}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    reasoning {formatUsd(job.actualReasoningCostUsd)}
+                    {job.actualReasoningTokens ? ` (${job.actualReasoningTokens} tok)` : ""} + images{" "}
+                    {formatUsd(job.actualImageCostUsd)}
+                  </p>
+                </div>
+                <div className="border border-[var(--line)] p-3 text-sm">
+                  <p className="label">Queue</p>
+                  <p>Max {job.estimate?.imageConcurrency ?? 5} images at a time</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {job.estimate?.imageBatches ?? "—"} image batches estimated
+                  </p>
+                </div>
+              </div>
+              {job.error ? <p className="text-sm text-[var(--danger)]">{job.error}</p> : null}
+              {job.plan?.diagnosis?.titlePromise ? (
+                <p className="text-sm text-[var(--muted)]">{job.plan.diagnosis.titlePromise}</p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {assets.length > 0 ? (
+            <section className="space-y-4">
+              <h2 className="text-2xl font-semibold">Generated assets</h2>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {assets.map((asset) => (
+                  <article key={asset.id} className="panel flex flex-col overflow-hidden">
+                    <div className="relative aspect-video bg-black">
+                      {assetSrc(asset) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={assetSrc(asset) || ""}
+                          alt={asset.payload?.assetName || "asset"}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center p-4 text-center font-[family-name:var(--font-ibm-plex-mono)] text-xs uppercase tracking-wider text-[var(--muted)]">
+                          {asset.status}
+                          {asset.error ? ` · ${asset.error}` : ""}
+                        </div>
+                      )}
+                      <span className="absolute left-2 top-2 bg-black/70 px-2 py-1 font-[family-name:var(--font-ibm-plex-mono)] text-[0.65rem] uppercase tracking-wider">
+                        #{asset.assetNumber} · {asset.status}
+                      </span>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-2 p-3">
+                      <h3 className="font-medium leading-snug">
+                        {asset.payload?.assetName || `Asset ${asset.assetNumber}`}
+                      </h3>
+                      <p className="text-sm leading-snug text-[var(--muted)]">
+                        {asset.payload?.scriptPlacement ||
+                          (asset.payload?.scriptExcerpt
+                            ? `Use when it says about ${asset.payload.scriptExcerpt}`
+                            : null) ||
+                          "Use when it says about this moment in the script"}
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-ghost mt-auto"
+                        disabled={!assetSrc(asset)}
+                        onClick={() => downloadAsset(asset)}
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
 }

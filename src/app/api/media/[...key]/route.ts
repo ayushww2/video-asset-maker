@@ -7,7 +7,9 @@ export async function GET(
 ) {
   const { key: parts } = await context.params;
   const key = parts.map((p) => decodeURIComponent(p)).join("/");
-  if (!key || key.includes("..")) return new Response("Not found", { status: 404 });
+  if (!key || key.includes("..")) {
+    return new Response("Not found", { status: 404 });
+  }
   const file = await getFromR2(key);
   if (!file) return new Response("Not found", { status: 404 });
   return new Response(Buffer.from(file.body), {
