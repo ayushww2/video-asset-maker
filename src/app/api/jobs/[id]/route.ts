@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { serializeAsset, serializeJob } from "@/lib/serialize";
 import { getSessionOrPublic } from "@/lib/session";
@@ -43,7 +44,7 @@ export async function PATCH(
     where: { id },
     data: {
       status: "queued",
-      plan: null,
+      plan: Prisma.JsonNull,
       error: null,
       progressDone: 0,
       progressTotal: job.assetCount,
