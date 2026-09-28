@@ -3,11 +3,12 @@ export function getContactBoxApiKey(): string {
 }
 
 export function getContactBoxBaseUrl(): string {
-  return (
+  const raw = (
     process.env.CONTACTBOX_BASE_URL ||
     process.env.OPENAI_BASE_URL ||
     "https://api.contactboxtools.me"
   ).replace(/\/$/, "");
+  return raw.endsWith("/v1") ? raw : `${raw}/v1`;
 }
 
 export function getReasoningModel(): string {
