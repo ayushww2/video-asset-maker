@@ -1,11 +1,35 @@
 import { prisma } from "@/lib/db";
-import { getImageConcurrency, getImageCostUsd, getReasoningCostUsd } from "@/lib/env";
+import {
+  getImageConcurrency,
+  getImageCostUsd,
+  getReasoningCostUsd,
+  getReasoningTimeoutMs,
+} from "@/lib/env";
 import { generateGptImage } from "@/lib/images/openaiImage";
 import { planJob } from "@/lib/jobs/plan";
 import type { JobPlan, PlannedAsset, ReferenceImage } from "@/lib/jobs/types";
 import { getR2Config, uploadToR2 } from "@/lib/r2";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)),
+      ms,
+    );
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
 
 async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
   const queue = [...items];
@@ -55,17 +79,32 @@ async function processOneJob(jobId: string) {
       const refs = Array.isArray(job.referenceImages)
         ? (job.referenceImages as ReferenceImage[])
         : [];
-      const result = await planJob({
-        title: job.title,
-        script: job.script,
-        guidance: job.guidance,
-        niche: job.niche,
-        mood: job.mood,
-        realFootage: job.realFootage,
-        assetCount: job.assetCount,
-        referenceNotes: job.referenceNotes,
-        referenceImages: refs,
-      });
+      const planningTimeoutMs = getReasoningTimeoutMs();
+      const heartbeat = setInterval(() => {
+        void prisma.job
+          .update({ where: { id: jobId }, data: { updatedAt: new Date() } })
+          .catch(() => {});
+      }, 30_000);
+      let result: Awaited<ReturnType<typeof planJob>>;
+      try {
+        result = await withTimeout(
+          planJob({
+            title: job.title,
+            script: job.script,
+            guidance: job.guidance,
+            niche: job.niche,
+            mood: job.mood,
+            realFootage: job.realFootage,
+            assetCount: job.assetCount,
+            referenceNotes: job.referenceNotes,
+            referenceImages: refs,
+          }),
+          planningTimeoutMs,
+          "Planning",
+        );
+      } finally {
+        clearInterval(heartbeat);
+      }
       plan = result.plan;
       await prisma.job.update({
         where: { id: jobId },

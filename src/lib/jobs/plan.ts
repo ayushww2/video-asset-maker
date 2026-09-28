@@ -1,5 +1,5 @@
 import { createContactBoxClient, getPlannerModel } from "@/lib/contactbox";
-import { getImageCostUsd } from "@/lib/env";
+import { getImageCostUsd, getPlannerScriptMaxChars } from "@/lib/env";
 import type { JobPlan, PlannedAsset, ReferenceImage } from "@/lib/jobs/types";
 
 const DEFAULT_NEGATIVE =
@@ -20,6 +20,20 @@ function asBool(value: unknown, fallback = false): boolean {
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((v) => String(v)).filter(Boolean) : [];
+}
+
+function scriptForPlanner(script: string | null | undefined, assetCount: number): string {
+  const s = script?.trim() || "";
+  if (!s) return "(none — plan from the title and guidance)";
+  const max = getPlannerScriptMaxChars();
+  if (s.length <= max) return s;
+  const head = Math.floor(max * 0.62);
+  const tail = Math.max(500, max - head - 280);
+  return `${s.slice(0, head)}
+
+[... middle of script omitted for planning (${s.length.toLocaleString()} characters total). Spread all ${assetCount} stills across the full story arc — hook, setup, reveals, payoff — using the title, guidance, and the excerpts below. ...]
+
+${s.slice(-tail)}`;
 }
 
 function plannerMessageText(content: unknown): string {
@@ -124,14 +138,18 @@ Guidance:
 ${guidance}
 
 Script (optional):
-${input.script?.trim() || "(none — plan from the title and guidance)"}
+${scriptForPlanner(input.script, count)}
 
 Reference notes:
 ${input.referenceNotes?.trim() || "(none)"}
 Reference images provided: ${input.referenceImages?.length || 0} (match style dialogue, do not copy scenes).`;
 
+  const model = getPlannerModel();
+  console.log(
+    `[plan] start title=${JSON.stringify(input.title.slice(0, 48))} assets=${count} scriptChars=${input.script?.length || 0}`,
+  );
   const completion = await client.chat.completions.create({
-    model: getPlannerModel(),
+    model,
     temperature: 0.4,
     response_format: { type: "json_object" },
     messages: [
@@ -139,6 +157,7 @@ Reference images provided: ${input.referenceImages?.length || 0} (match style di
       { role: "user", content: user },
     ],
   });
+  console.log(`[plan] done model=${model} ms=${Date.now() - started}`);
 
   const choice = completion.choices?.[0];
   const text = plannerMessageText(choice?.message?.content);

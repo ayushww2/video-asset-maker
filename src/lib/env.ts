@@ -19,6 +19,18 @@ export function getReasoningModel(): string {
   );
 }
 
+export function getReasoningTimeoutMs(): number {
+  const n = Number(process.env.REASONING_TIMEOUT_MS || 600_000);
+  if (!Number.isFinite(n) || n < 60_000) return 600_000;
+  return Math.min(900_000, Math.round(n));
+}
+
+export function getPlannerScriptMaxChars(): number {
+  const n = Number(process.env.PLANNER_SCRIPT_MAX_CHARS || 14_000);
+  if (!Number.isFinite(n) || n < 2000) return 14_000;
+  return Math.min(40_000, Math.round(n));
+}
+
 export function getOpenAiImageConfig() {
   const rawBase = (
     process.env.IMAGE_BASE_URL ||

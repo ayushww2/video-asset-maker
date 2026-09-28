@@ -3,6 +3,7 @@ import {
   getContactBoxApiKey,
   getContactBoxBaseUrl,
   getReasoningModel,
+  getReasoningTimeoutMs,
 } from "@/lib/env";
 
 export function createContactBoxClient() {
@@ -13,7 +14,7 @@ export function createContactBoxClient() {
   return new OpenAI({
     apiKey,
     baseURL: getContactBoxBaseUrl(),
-    timeout: 180_000,
+    timeout: getReasoningTimeoutMs(),
   });
 }
 
