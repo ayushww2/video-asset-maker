@@ -3,10 +3,10 @@ import { prisma } from "@/lib/db";
 import { hookProgressTotal, SCENE_COUNT } from "@/lib/jobs/pipeline";
 import { enqueueAllowed } from "@/lib/jobs/process";
 import { serializeJob } from "@/lib/serialize";
-import { getSessionFromCookies } from "@/lib/session";
+import { getSessionOrPublic } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
-  const user = await getSessionFromCookies();
+  const user = await getSessionOrPublic();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const kind = req.nextUrl.searchParams.get("kind");
   const [jobs, capacity] = await Promise.all([
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getSessionFromCookies();
+  const user = await getSessionOrPublic();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const capacity = await enqueueAllowed();
   if (!capacity.ok) {

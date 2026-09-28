@@ -3,13 +3,13 @@ import { ingestStill } from "@/lib/images/ingest";
 import { CLIP_SECONDS, SCENE_COUNT } from "@/lib/jobs/pipeline";
 import { enqueueAllowed } from "@/lib/jobs/process";
 import { serializeJob } from "@/lib/serialize";
-import { getSessionFromCookies } from "@/lib/session";
+import { getSessionOrPublic } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const user = await getSessionFromCookies();
+  const user = await getSessionOrPublic();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const capacity = await enqueueAllowed();
   if (!capacity.ok) {

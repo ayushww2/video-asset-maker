@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readSessionToken, SESSION_COOKIE } from "@/lib/auth";
+import { isAuthEnabled } from "@/lib/env";
 
 const PUBLIC = ["/login", "/api/health", "/api/media/", "/api/auth/login"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname.startsWith("/_next") || pathname === "/favicon.ico") return NextResponse.next();
+  if (!isAuthEnabled()) return NextResponse.next();
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p))) return NextResponse.next();
 
   const user = await readSessionToken(req.cookies.get(SESSION_COOKIE)?.value);

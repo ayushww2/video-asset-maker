@@ -37,3 +37,15 @@ export function maxHooksPerDay(): number {
 export function r2PublicUrl(): string {
   return (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
 }
+
+/** When false, middleware and API routes allow anonymous use (set DISABLE_AUTH=1 on Railway). */
+export function isAuthEnabled(): boolean {
+  const disable = (process.env.DISABLE_AUTH || "").trim().toLowerCase();
+  if (disable === "1" || disable === "true" || disable === "yes") return false;
+  const required = (process.env.AUTH_REQUIRED ?? "true").trim().toLowerCase();
+  return required !== "false" && required !== "0";
+}
+
+export function elevenLabsApiKey(): string {
+  return (process.env.ELEVENLABS_API_KEY || "").trim();
+}

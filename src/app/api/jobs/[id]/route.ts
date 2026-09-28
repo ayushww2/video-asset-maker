@@ -1,13 +1,13 @@
 import { prisma } from "@/lib/db";
 import { CLIP_SECONDS } from "@/lib/jobs/pipeline";
 import { serializeJob } from "@/lib/serialize";
-import { getSessionFromCookies } from "@/lib/session";
+import { getSessionOrPublic } from "@/lib/session";
 
 export async function GET(
   _req: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const user = await getSessionFromCookies();
+  const user = await getSessionOrPublic();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   const job = await prisma.hookJob.findUnique({
@@ -22,7 +22,7 @@ export async function PATCH(
   req: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const user = await getSessionFromCookies();
+  const user = await getSessionOrPublic();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   let body: { retry?: boolean } = {};

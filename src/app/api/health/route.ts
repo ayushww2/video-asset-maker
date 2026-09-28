@@ -1,3 +1,5 @@
+import { elevenLabsApiKey, isAuthEnabled } from "@/lib/env";
+
 export async function GET() {
   let country: string | null = null;
   try {
@@ -11,6 +13,10 @@ export async function GET() {
   }
   return Response.json({
     ok: true,
+    authRequired: isAuthEnabled(),
+    elevenLabsConfigured: Boolean(elevenLabsApiKey()),
+    imageModel: "gpt-image-2",
+    imageQuality: process.env.IMAGE_QUALITY || "low",
     railwayRegion: process.env.RAILWAY_REPLICA_REGION || process.env.RAILWAY_REGION || null,
     egressCountry: country,
   });
