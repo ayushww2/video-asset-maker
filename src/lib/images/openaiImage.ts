@@ -1,6 +1,11 @@
 import OpenAI from "openai";
 import { createAndWaitForMedia, downloadMedia } from "@/lib/elevenlabs/flows";
 import { getOpenAiImageConfig, useElevenLabsImage } from "@/lib/env";
+import {
+  toElevenLabsReferenceImages,
+  type ElevenLabsInlineImage,
+} from "@/lib/images/referenceImages";
+import type { ReferenceImage } from "@/lib/jobs/types";
 
 export type GeneratedImage = {
   model: string;
@@ -48,17 +53,22 @@ async function generateViaElevenLabs(params: {
   quality: "low" | "medium" | "high" | "auto";
   model: string;
   size: string;
+  referenceImages?: ReferenceImage[];
 }): Promise<GeneratedImage> {
   const quality = params.quality === "medium" || params.quality === "high" ? params.quality : "low";
+  const images: ElevenLabsInlineImage[] = toElevenLabsReferenceImages(params.referenceImages);
+  const body: Record<string, unknown> = {
+    model_id: "gpt-image-2",
+    prompt: params.prompt,
+    quality,
+    aspect_ratio: "16:9",
+    resolution: "1K",
+  };
+  if (images.length) body.images = images;
+
   const result = await createAndWaitForMedia({
     kind: "image",
-    body: {
-      model_id: "gpt-image-2",
-      prompt: params.prompt,
-      quality,
-      aspect_ratio: "16:9",
-      resolution: "1K",
-    },
+    body,
     timeoutMs: 180_000,
   });
   const bytes = await downloadMedia(result.url);
@@ -77,6 +87,7 @@ export async function generateGptImage(params: {
   size?: string;
   quality?: "low" | "medium" | "high" | "auto";
   model?: string;
+  referenceImages?: ReferenceImage[];
 }): Promise<GeneratedImage> {
   const defaults = getOpenAiImageConfig();
   const model = params.model || defaults.model;
@@ -84,7 +95,13 @@ export async function generateGptImage(params: {
   const quality = params.quality || defaults.quality;
 
   if (useElevenLabsImage()) {
-    return generateViaElevenLabs({ prompt: params.prompt, quality, model, size });
+    return generateViaElevenLabs({
+      prompt: params.prompt,
+      quality,
+      model,
+      size,
+      referenceImages: params.referenceImages,
+    });
   }
 
   const openai = createOpenAiImageClient();

@@ -19,9 +19,22 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promis
   await Promise.all(runners);
 }
 
-function promptFor(asset: PlannedAsset): string {
+function promptFor(
+  asset: PlannedAsset,
+  ctx?: {
+    referenceStyleNotes?: string | null;
+    referenceNotes?: string | null;
+    hasReferences?: boolean;
+  },
+): string {
+  const realism =
+    ctx?.hasReferences &&
+    "Use the attached reference images only for photoreal texture, lighting, grain, and camera character. Do not copy their exact scenes, faces, or compositions. Create a new full-bleed 16:9 documentary still.";
   const parts = [
     asset.detailedPrompt || asset.quickPrompt,
+    ctx?.referenceStyleNotes?.trim(),
+    ctx?.referenceNotes?.trim() ? `Creator reference notes: ${ctx.referenceNotes.trim()}` : "",
+    realism,
     asset.negativePrompt ? `Avoid: ${asset.negativePrompt}` : "",
   ].filter(Boolean);
   return parts.join("\n\n");
@@ -97,6 +110,15 @@ async function processOneJob(jobId: string) {
     const concurrency = getImageConcurrency();
     const unitCost = getImageCostUsd();
     const imageStarted = Date.now();
+    const refs = Array.isArray(job.referenceImages)
+      ? (job.referenceImages as ReferenceImage[])
+      : [];
+    const planForPrompt = (plan || (job.plan as JobPlan | null)) as JobPlan | null;
+    const promptCtx = {
+      referenceStyleNotes: planForPrompt?.referenceStyleNotes,
+      referenceNotes: job.referenceNotes,
+      hasReferences: refs.length > 0,
+    };
 
     await runPool(pending, concurrency, async (asset) => {
       await prisma.jobAsset.update({
@@ -105,7 +127,10 @@ async function processOneJob(jobId: string) {
       });
       try {
         const payload = (asset.payload || {}) as PlannedAsset;
-        const image = await generateGptImage({ prompt: promptFor(payload) });
+        const image = await generateGptImage({
+          prompt: promptFor(payload, promptCtx),
+          referenceImages: refs.length ? refs : undefined,
+        });
         const key = `video-asset-maker/jobs/${jobId}/${String(asset.assetNumber).padStart(2, "0")}.png`;
         let imageUrl: string | null = null;
         let imageR2Key: string | null = null;

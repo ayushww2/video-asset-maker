@@ -22,6 +22,20 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((v) => String(v)).filter(Boolean) : [];
 }
 
+function plannerMessageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part: unknown) =>
+        part && typeof part === "object" && "text" in part
+          ? String((part as { text?: string }).text || "")
+          : "",
+      )
+      .join("");
+  }
+  return "";
+}
+
 function normalizeAsset(raw: unknown, index: number): PlannedAsset {
   const a = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const assetNumber = asNumber(a.assetNumber, index + 1);
@@ -126,7 +140,15 @@ Reference images provided: ${input.referenceImages?.length || 0} (match style di
     ],
   });
 
-  const text = completion.choices[0]?.message?.content || "{}";
+  const choice = completion.choices?.[0];
+  const text = plannerMessageText(choice?.message?.content);
+  if (!text.trim()) {
+    const hint =
+      !completion.choices?.length
+        ? "Planner returned no choices (check CONTACTBOX_API_KEY and REASONING_MODEL)."
+        : "Planner returned empty content.";
+    throw new Error(hint);
+  }
   let parsed: Record<string, unknown> = {};
   try {
     parsed = JSON.parse(text) as Record<string, unknown>;
